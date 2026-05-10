@@ -859,7 +859,7 @@ function saveBooking(){
     id:Date.now(),user,date,
     phone:u.phone,gender:u.gender,
     addr:u.addr,
-    welfare:document.getElementById('bk-welfare').value,
+    welfare:document.getElementById('bk-welfare').value||'一般戶',
     dest:document.getElementById('bk-dest').value,
     dep:document.getElementById('bk-dep').value,
     ret:document.getElementById('bk-ret').value,
@@ -923,7 +923,7 @@ function loadDispatch(){
       <div class="dp-user-tab${i===0?' open':''}" onclick="toggleDpUser(${i})">
         <span class="tab-name">${b.user}</span>
         <span class="tag tag-f">${b.gender}</span>
-        <span class="tag ${b.welfare==='一般戶'?'tag-general':'tag-low'}">${b.welfare}</span>
+        <span class="tag ${(b.welfare||'一般戶')==='一般戶'?'tag-general':'tag-low'}">${b.welfare||'一般戶'}</span>
         ${b.companion==='有'?'<span class="tag tag-low">有陪同</span>':''}
         <span style="font-size:12px;color:var(--muted)">${b.phone}</span>
         <span class="tab-arrow">▶</span>
@@ -1124,7 +1124,7 @@ function genRecord(){
         <td style="white-space:nowrap;font-size:12px">${b.garr?fmtTime(b.garr):'<span style="font-size:10px;color:#C4A8B4">待派車</span>'}</td>
         <td style="white-space:nowrap;font-size:12px">${b.rdep?fmtTime(b.rdep):'<span style="font-size:10px;color:#C4A8B4">待派車</span>'}</td>
         <td style="white-space:nowrap;font-size:12px">${b.rarr?fmtTime(b.rarr):'<span style="font-size:10px;color:#C4A8B4">待派車</span>'}</td>
-        <td><span class="tag ${b.welfare==='一般戶'?'tag-general':'tag-low'}">${b.welfare}</span></td>
+        <td><span class="tag ${(b.welfare||'一般戶')==='一般戶'?'tag-general':'tag-low'}">${b.welfare||'一般戶'}</span></td>
         <td>${b.companion}</td>
         <td><input type="text" value="${b.note||''}" placeholder="備註" style="width:90px;font-size:11px"></td>
       </tr>`;
@@ -1342,7 +1342,7 @@ function exportRecordExcel(){
     const day=items.filter(b=>b.date===dt);
     const d=new Date(dt);
     day.forEach((b,bi)=>{
-      const cells=[bi===0?seq:'',rocFmt(dt,false),'星期'+WD[d.getDay()],b.user,b.phone,b.addr,b.dest,b.gdep||'',b.garr||'',b.rdep||'',b.rarr||'',b.welfare,b.companion,b.note||''];
+      const cells=[bi===0?seq:'',rocFmt(dt,false),'星期'+WD[d.getDay()],b.user,b.phone,b.addr,b.dest,b.gdep||'',b.garr||'',b.rdep||'',b.rarr||'',b.welfare||'一般戶',b.companion,b.note||''];
       cells.forEach((v,ci)=>{ws[XLSX.utils.encode_cell({r:row,c:ci})]={v:String(v),t:'s',s:{font:{sz:10,name:'新細明體'},alignment:{horizontal:'center',vertical:'center'}}};});
       row++;
     });
@@ -1433,7 +1433,7 @@ function exportDispatchExcel(){
     const gf=parseFloat(document.getElementById('dp-gfee-'+i)?.value)||0;
     const rf=parseFloat(document.getElementById('dp-rfee-'+i)?.value)||0;
     total+=gf+rf;
-    const cells=[b.user,b.phone,b.addr,b.dest,b.gender,b.welfare,b.companion,
+    const cells=[b.user,b.phone,b.addr,b.dest,b.gender,b.welfare||'一般戶',b.companion,
       document.getElementById('dp-gdep-'+i)?.value||'',
       document.getElementById('dp-garr-'+i)?.value||'',
       document.getElementById('dp-gkm-'+i)?.value||'',
@@ -1727,7 +1727,7 @@ function genDailyReport(){
     return `<tr style="${rowStyle}">
       <td style="padding:8px 10px;font-weight:700;font-size:13px;color:#042C53;white-space:nowrap">${b.user}</td>
       <td style="padding:8px 6px;font-size:11px;color:#555">${b.gender}</td>
-      <td style="padding:8px 6px"><span style="background:#E6F1FB;color:#185FA5;font-size:10px;padding:2px 7px;border-radius:12px;font-weight:600">${b.welfare}</span></td>
+      <td style="padding:8px 6px"><span style="background:#E6F1FB;color:#185FA5;font-size:10px;padding:2px 7px;border-radius:12px;font-weight:600">${b.welfare||'一般戶'}</span></td>
       <td style="padding:8px 6px;font-size:11px;color:#555">${b.companion}</td>
       <td style="padding:8px 6px;font-size:10.5px;color:#333;max-width:130px">${b.dest}</td>
       <td style="padding:8px 6px;font-size:12px;white-space:nowrap;${!gdep?'color:#ccc':''}">${gdep?fmtTime(gdep):'—'}</td>
