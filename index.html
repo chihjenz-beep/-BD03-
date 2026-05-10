@@ -1021,6 +1021,10 @@ function saveDispatch(){
   items.forEach((b,i)=>{
     const idx=bookings.findIndex(x=>x.id===b.id);
     if(idx<0)return;
+    // 取得照片 dataUrl（若已拍照則存入，否則保留舊值）
+    const photoImg=document.getElementById('photo-img-'+i);
+    const photoData=(photoImg&&photoImg.src&&photoImg.src.startsWith('data:'))?photoImg.src:(bookings[idx].photoData||'');
+    const photoTime=document.getElementById('photo-time-'+i)?.textContent||bookings[idx].photoTime||'';
     bookings[idx]={...bookings[idx],
       dispatched:true,
       phone: bookings[idx].phone || (USERS[bookings[idx].user]&&USERS[bookings[idx].user].phone) || '',
@@ -1031,7 +1035,9 @@ function saveDispatch(){
       rdep:document.getElementById('dp-rdep-'+i)?.value||'',
       rarr:document.getElementById('dp-rarr-'+i)?.value||'',
       rkm:document.getElementById('dp-rkm-'+i)?.value||'',
-      rfee:document.getElementById('dp-rfee-'+i)?.value||''
+      rfee:document.getElementById('dp-rfee-'+i)?.value||'',
+      photoData,
+      photoTime
     };
   });
   save();renderBkList();
@@ -1681,13 +1687,20 @@ function genDailyReport(){
     </div>`:'';
 
   let total=0;
-  const rows=items.map((b,i)=>{
+  // 先蒐集每筆資料（含照片）
+  const rowData=items.map((b,i)=>{
     const gf=parseFloat(document.getElementById('dp-gfee-'+i)?.value)||0;
     const rf=parseFloat(document.getElementById('dp-rfee-'+i)?.value)||0;
     const gkm=document.getElementById('dp-gkm-'+i)?.value||'—';
     const rkm=document.getElementById('dp-rkm-'+i)?.value||'—';
+    // 讀取即時照片（畫面已拍但尚未儲存）或已存入 bookings 的照片
+    const liveImg=document.getElementById('photo-img-'+i);
+    const photoData=(liveImg&&liveImg.src&&liveImg.src.startsWith('data:'))?liveImg.src:(b.photoData||'');
+    const photoTime=document.getElementById('photo-time-'+i)?.textContent||b.photoTime||'';
     total+=gf+rf;
-    /* check intra-row conflict for highlight */
+    return {b,i,gf,rf,gkm,rkm,photoData,photoTime};
+  });
+  const rows=rowData.map(({b,gf,rf,gkm,rkm})=>{
     const gdep=b.gdep||'',garr=b.garr||'',rdep=b.rdep||'',rarr=b.rarr||'';
     const rowConflict=conflicts.some(c=>c.label.includes(b.user));
     const rowStyle=rowConflict?'background:#FFF8E7':'';
@@ -1708,6 +1721,24 @@ function genDailyReport(){
       <td style="padding:8px 6px;font-size:13px;font-weight:800;color:#042C53;background:#EBF3FC">NT$${Math.round(gf+rf)}</td>
     </tr>`;
   }).join('');
+  // 搭乘確認照片區塊
+  const photosWithData=rowData.filter(r=>r.photoData);
+  const photosHTML=photosWithData.length?`
+    <div style="margin-top:16px;border:1px solid #dde6f0;border-radius:8px;overflow:hidden">
+      <div style="background:#0C447C;color:#E6F1FB;padding:8px 14px;font-size:12px;font-weight:700;letter-spacing:.05em">
+        📷 搭乘確認照片
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:14px;background:#F7F9FC">
+        ${photosWithData.map(r=>`
+          <div style="background:#fff;border:1px solid #dde6f0;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+            <img src="${r.photoData}" style="width:100%;display:block;border-radius:6px 6px 0 0">
+            <div style="padding:6px 10px;border-top:1px solid #edf0f4">
+              <div style="font-size:12px;font-weight:700;color:#042C53">${r.b.user}</div>
+              <div style="font-size:10px;color:#8099B0;margin-top:2px">${r.photoTime||''}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`:'<div style="margin-top:14px;padding:12px 14px;background:#F8F9FA;border:1px dashed #CCD1D9;border-radius:6px;font-size:12px;color:#999;text-align:center">尚無搭乘確認照片</div>';
 
   document.getElementById('daily-report-body').innerHTML=`
     <div style="padding:16px 24px 8px">
@@ -1759,7 +1790,8 @@ function genDailyReport(){
         <span style="color:#85B7EB;font-size:13px">車資總金額</span>
         <span style="color:#fff;font-size:22px;font-weight:700">NT$ ${Math.round(total).toLocaleString()}</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid #dde6f0;border-radius:0 0 8px 8px;margin-top:0;overflow:hidden">
+      ${photosHTML}
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid #dde6f0;border-radius:0 0 8px 8px;margin-top:16px;overflow:hidden">
         <div style="padding:14px 16px;border-right:1px solid #dde6f0">
           <div style="font-size:11px;color:#999;margin-bottom:22px">駕駛員簽名</div>
           <div style="border-bottom:1px solid #ccc;margin-bottom:4px"></div>
