@@ -885,7 +885,7 @@ function renderBkList(){
   document.getElementById('bk-count').textContent=bookings.length;
   if(!bookings.length){sec.style.display='none';return;}
   sec.style.display='block';
-  list.innerHTML=bookings.map(b=>`
+  list.innerHTML=[...bookings].sort((a,b)=>b.date.localeCompare(a.date)||(b.id>a.id?-1:1)).map(b=>`
     <div class="bk-item">
       <span class="bk-name">${b.user}</span>
       <span class="bk-date">${b.date} ${b.wd}</span>
