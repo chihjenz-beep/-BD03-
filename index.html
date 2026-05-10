@@ -937,23 +937,23 @@ function loadDispatch(){
             <div>
               <div style="font-size:11px;font-weight:800;color:var(--t);margin-bottom:8px;padding:4px 0;border-bottom:2px dashed #F9D0E0">去程</div>
               <div class="grid2">
-                <div class="field"><label>啟程時間</label><input type="time" id="dp-gdep-${i}" value="${b.dep}"></div>
-                <div class="field"><label>抵達時間</label><input type="time" id="dp-garr-${i}"></div>
+                <div class="field"><label>啟程時間</label><input type="time" id="dp-gdep-${i}" value="${b.gdep||b.dep||''}"></div>
+                <div class="field"><label>抵達時間</label><input type="time" id="dp-garr-${i}" value="${b.garr||''}"></div>
               </div>
               <div class="grid2">
-                <div class="field"><label>行駛里程（公里）</label><input type="number" id="dp-gkm-${i}" placeholder="0.0" step="0.1" min="0"></div>
-                <div class="field"><label>車資（元）</label><input type="number" id="dp-gfee-${i}" placeholder="0" min="0" oninput="calcTotal('${date}')"></div>
+                <div class="field"><label>行駛里程（公里）</label><input type="number" id="dp-gkm-${i}" placeholder="0.0" step="0.1" min="0" value="${b.gkm||''}"></div>
+                <div class="field"><label>車資（元）</label><input type="number" id="dp-gfee-${i}" placeholder="0" min="0" oninput="calcTotal('${date}')" value="${b.gfee||''}"></div>
               </div>
             </div>
             <div>
               <div style="font-size:11px;font-weight:800;color:var(--peach);margin-bottom:8px;padding:4px 0;border-bottom:2px dashed #F9D8C0">回程</div>
               <div class="grid2">
-                <div class="field"><label>出發時間</label><input type="time" id="dp-rdep-${i}" value="${b.ret}"></div>
-                <div class="field"><label>抵達時間</label><input type="time" id="dp-rarr-${i}"></div>
+                <div class="field"><label>出發時間</label><input type="time" id="dp-rdep-${i}" value="${b.rdep||b.ret||''}"></div>
+                <div class="field"><label>抵達時間</label><input type="time" id="dp-rarr-${i}" value="${b.rarr||''}"></div>
               </div>
               <div class="grid2">
-                <div class="field"><label>行駛里程（公里）</label><input type="number" id="dp-rkm-${i}" placeholder="0.0" step="0.1" min="0"></div>
-                <div class="field"><label>車資（元）</label><input type="number" id="dp-rfee-${i}" placeholder="0" min="0" oninput="calcTotal('${date}')"></div>
+                <div class="field"><label>行駛里程（公里）</label><input type="number" id="dp-rkm-${i}" placeholder="0.0" step="0.1" min="0" value="${b.rkm||''}"></div>
+                <div class="field"><label>車資（元）</label><input type="number" id="dp-rfee-${i}" placeholder="0" min="0" oninput="calcTotal('${date}')" value="${b.rfee||''}"></div>
               </div>
             </div>
           </div>
@@ -1059,8 +1059,12 @@ function saveDispatch(){
       dispatched:true,
       gdep:document.getElementById('dp-gdep-'+i)?.value||'',
       garr:document.getElementById('dp-garr-'+i)?.value||'',
+      gkm:document.getElementById('dp-gkm-'+i)?.value||'',
+      gfee:document.getElementById('dp-gfee-'+i)?.value||'',
       rdep:document.getElementById('dp-rdep-'+i)?.value||'',
-      rarr:document.getElementById('dp-rarr-'+i)?.value||''
+      rarr:document.getElementById('dp-rarr-'+i)?.value||'',
+      rkm:document.getElementById('dp-rkm-'+i)?.value||'',
+      rfee:document.getElementById('dp-rfee-'+i)?.value||''
     };
   });
   save();renderBkList();
