@@ -40,7 +40,7 @@ body{
   background:linear-gradient(135deg,#D4608A 0%,#E8839F 50%,#C9A8E0 100%);
   color:#fff;padding:16px 28px;display:flex;align-items:center;gap:14px;
   box-shadow:0 4px 20px rgba(212,96,138,.30);
-  position:relative;overflow:hidden;
+  position:sticky;top:0;z-index:1000;overflow:hidden;
 }
 .sys-header::before{
   content:'🌸';position:absolute;right:160px;top:50%;transform:translateY(-50%);
@@ -64,6 +64,7 @@ nav{
   padding:10px 20px;display:flex;gap:8px;overflow-x:auto;
   box-shadow:0 2px 12px rgba(212,96,138,.07);
   align-items:center;
+  position:sticky;top:var(--header-h,72px);z-index:999;
 }
 .nav-btn{
   padding:7px 18px;font-size:13px;font-weight:700;
@@ -1835,6 +1836,14 @@ function exportDailyReportPDF(){
 }
 
 
+
+// ── Sticky header height sync ──
+function syncHeaderHeight(){
+  const h=document.querySelector('.sys-header');
+  if(h) document.documentElement.style.setProperty('--header-h', h.offsetHeight+'px');
+}
+window.addEventListener('DOMContentLoaded', syncHeaderHeight);
+window.addEventListener('resize', syncHeaderHeight);
 
 // Init
 window.addEventListener('DOMContentLoaded', async ()=>{
