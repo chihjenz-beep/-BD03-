@@ -875,7 +875,7 @@ function saveBooking(){
 }
 function delBooking(id){
   if(!confirm('確認刪除此預約？'))return;
-  bookings=bookings.filter(b=>b.id!==id);
+  bookings=bookings.filter(b=>String(b.id)!==String(id));
   save();renderBkList();
 }
 function renderBkList(){
@@ -891,7 +891,7 @@ function renderBkList(){
       <span class="bk-addr">${b.addr}</span>
       <span class="tag ${b.companion==='有'?'tag-low':'tag-general'}">${b.companion==='有'?'有陪同':'無陪同'}</span>
       <span class="tag ${b.dispatched?'tag-teal':'tag-general'}">${b.dispatched?'已派車':'待派車'}</span>
-      <button class="bk-del" onclick="delBooking(${b.id})">刪除</button>
+      <button class="bk-del" onclick="delBooking('${b.id}')">刪除</button>
     </div>`).join('');
 }
 
