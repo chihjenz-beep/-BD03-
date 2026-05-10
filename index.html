@@ -866,6 +866,8 @@ function refreshDpDates(){
   const dates=[...new Set(bookings.map(b=>b.date))].sort();
   const cur=sel.value;
   sel.innerHTML='<option value="">— 選擇日期 —</option>'+dates.map(d=>`<option value="${d}"${d===cur?' selected':''}>${d}</option>`).join('');
+  // 重新填回健康紀錄（避免切換 tab 後欄位被清空）
+  loadDispatch();
 }
 function loadDispatch(){
   const date=document.getElementById('dp-date').value;
