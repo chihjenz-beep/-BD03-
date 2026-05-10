@@ -710,7 +710,8 @@ async function loadBookings(){
           ...b,
           id:String(b.id),
           date: b.date ? String(b.date).split('T')[0] : b.date,
-          wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : '')
+          wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : ''),
+          phone: b.phone || b.Phone || b.tel || b.Tel || (USERS[b.user]&&USERS[b.user].phone) || ''
         }));
         localStorage.setItem('pg_bookings',JSON.stringify(bookings));
         showSync('✓ 預約紀錄已同步');
@@ -720,7 +721,8 @@ async function loadBookings(){
           bookings=cached.map(b=>({
             ...b,
             date: b.date ? String(b.date).split('T')[0] : b.date,
-            wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : '')
+            wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : ''),
+            phone: b.phone || b.Phone || b.tel || b.Tel || (USERS[b.user]&&USERS[b.user].phone) || ''
           }));
           await gasPost('saveBookings',bookings);
           showSync('✓ 本機資料已上傳至試算表');
@@ -1057,6 +1059,7 @@ function saveDispatch(){
     if(idx<0)return;
     bookings[idx]={...bookings[idx],
       dispatched:true,
+      phone: bookings[idx].phone || (USERS[bookings[idx].user]&&USERS[bookings[idx].user].phone) || '',
       gdep:document.getElementById('dp-gdep-'+i)?.value||'',
       garr:document.getElementById('dp-garr-'+i)?.value||'',
       gkm:document.getElementById('dp-gkm-'+i)?.value||'',
@@ -1879,6 +1882,13 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     loadClean(),
     loadVitals()
   ]);
+  // 補齊 phone（若 bookings 先載入時 USERS 尚未就緒）
+  bookings=bookings.map(b=>({
+    ...b,
+    phone: b.phone || (USERS[b.user]&&USERS[b.user].phone) || ''
+  }));
+  renderBkList();
+  renderUserTable();
 });
 </script>
 </body>
