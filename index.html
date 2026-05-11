@@ -951,7 +951,22 @@ function loadDispatch(){
         </div>
       </div>
     </div>`).join('');
-  setTimeout(()=>{items.forEach((_,i)=>initSign(i));calcTotal(date);},80);
+  setTimeout(()=>{
+    items.forEach((b,i)=>{
+      initSign(i);
+      if(b.photoData){
+        const img=document.getElementById('photo-img-'+i);
+        const timeEl=document.getElementById('photo-time-'+i);
+        const preview=document.getElementById('photo-preview-'+i);
+        const idle=document.getElementById('photo-idle-'+i);
+        if(img)img.src=b.photoData;
+        if(timeEl)timeEl.textContent=b.photoTime||'';
+        if(preview)preview.style.display='block';
+        if(idle)idle.style.display='none';
+      }
+    });
+    calcTotal(date);
+  },80);
 }
 function calcTotal(date){
   const items=bookings.filter(b=>b.date===date);
