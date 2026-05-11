@@ -1518,11 +1518,14 @@ function randomFillVitals(){
     const d=64+Math.floor(Math.random()*16);  // 64~79
     return `${s}/${d}`;
   }
-  function rndHR(){return String(62+Math.floor(Math.random()*27));} // 62~88
+  function rndHR(){return String(70+Math.floor(Math.random()*12));} // 70~81
 
   const promises=[];
   for(let d=1;d<=days;d++){
     const dt=`${y_ad}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    // 跳過週六（6）及週日（0）
+    const dow=new Date(dt).getDay();
+    if(dow===0||dow===6)continue;
     // 已有資料不覆蓋
     if(getVital(dt,'temp')&&getVital(dt,'bp')&&getVital(dt,'hr'))continue;
     promises.push(
@@ -1533,7 +1536,7 @@ function randomFillVitals(){
   }
   Promise.allSettled(promises).then(()=>{
     genVitals();
-    showSync('✓ 已隨機填入本月生命徵象（正常值）');
+    showSync('✓ 已隨機填入本月生命徵象（平日，正常值）');
   });
 }
 
