@@ -540,7 +540,7 @@ tr:hover td{background:#F8FBFD}
     <div class="grid3">
       <div class="field"><label>民國年份</label><input type="number" id="vt-y" value="115" min="115" max="130"></div>
       <div class="field"><label>月份</label><select id="vt-m"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5" selected>5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></div>
-      <div class="field" style="justify-content:flex-end"><label>&nbsp;</label><div style="display:flex;gap:8px"><button class="btn btn-p" onclick="genVitals()">產生月報</button><button class="btn btn-amber" onclick="exportVitalsExcel()">匯出 Excel</button></div></div>
+      <div class="field" style="justify-content:flex-end"><label>&nbsp;</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p" onclick="genVitals()">產生月報</button><button class="btn" style="background:#2D6A4F;color:#fff" onclick="randomFillVitals()">🎲 隨機產生本月紀錄</button><button class="btn btn-amber" onclick="exportVitalsExcel()">匯出 Excel</button></div></div>
     </div>
   </div>
   <div id="vt-out"></div>
@@ -1484,6 +1484,42 @@ function hrClass(hr){
   if(isNaN(v))return '';
   if(v>100||v<60)return 'color:#C0334A;font-weight:700';
   return 'color:#2D7A6A';
+}
+
+/* 隨機產生正常範圍內的生命徵象 */
+function randomFillVitals(){
+  const y=document.getElementById('vt-y').value;
+  const m=document.getElementById('vt-m').value;
+  const y_ad=parseInt(y)+1911;
+  const days=new Date(y_ad,m,0).getDate();
+
+  // 隨機正常值範圍：
+  // 體溫：36.0 ~ 36.9°C（步進 0.1）
+  // 血壓：收縮壓 108~128、舒張壓 64~79（偶爾稍低，保持正常）
+  // 心跳：62 ~ 88 次/分
+  function rndTemp(){return(36.0+Math.random()*0.9).toFixed(1);}
+  function rndBP(){
+    const s=108+Math.floor(Math.random()*21); // 108~128
+    const d=64+Math.floor(Math.random()*16);  // 64~79
+    return `${s}/${d}`;
+  }
+  function rndHR(){return String(62+Math.floor(Math.random()*27));} // 62~88
+
+  const promises=[];
+  for(let d=1;d<=days;d++){
+    const dt=`${y_ad}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    // 已有資料不覆蓋
+    if(getVital(dt,'temp')&&getVital(dt,'bp')&&getVital(dt,'hr'))continue;
+    promises.push(
+      saveVital(dt,'temp',rndTemp()),
+      saveVital(dt,'bp',rndBP()),
+      saveVital(dt,'hr',rndHR())
+    );
+  }
+  Promise.allSettled(promises).then(()=>{
+    genVitals();
+    showSync('✓ 已隨機填入本月生命徵象（正常值）');
+  });
 }
 
 function genVitals(){
