@@ -1012,11 +1012,19 @@ function stopCam(i){
 function snapPhoto(i){
   const video=document.getElementById('video-'+i);
   const canvas=document.getElementById('photo-canvas-'+i);
-  canvas.width=video.videoWidth||640;
-  canvas.height=video.videoHeight||480;
-  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
-  const dataUrl=canvas.toDataURL('image/jpeg',0.85);
-  document.getElementById('photo-img-'+i).src=dataUrl;
+  // ── 壓縮：長邊限制 800px，品質 0.72，減少 base64 體積 ──
+  const maxSide=800;
+  let w=video.videoWidth||640, h=video.videoHeight||480;
+  if(w>maxSide||h>maxSide){
+    if(w>=h){h=Math.round(h*maxSide/w);w=maxSide;}
+    else{w=Math.round(w*maxSide/h);h=maxSide;}
+  }
+  canvas.width=w; canvas.height=h;
+  canvas.getContext('2d').drawImage(video,0,0,w,h);
+  const dataUrl=canvas.toDataURL('image/jpeg',0.72);
+  const imgEl=document.getElementById('photo-img-'+i);
+  imgEl.src=dataUrl;
+  imgEl.dataset.newPhoto='1'; // 標記「本次新拍」
   const now=new Date();
   document.getElementById('photo-time-'+i).textContent=
     `拍攝時間：${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
@@ -1027,19 +1035,53 @@ function snapPhoto(i){
 }
 function retakePhoto(i){
   document.getElementById('photo-preview-'+i).style.display='none';
+  const imgEl=document.getElementById('photo-img-'+i);
+  imgEl.dataset.newPhoto=''; // 重拍時清除標記
   startCam(i);
 }
-function saveDispatch(){
+
+// ── 上傳單張照片到 GAS Drive，回傳公開 URL ──
+async function uploadPhotoToGAS(base64DataUrl, filename){
+  if(!GAS_URL) return base64DataUrl; // 離線模式直接存 base64
+  try{
+    const base64=base64DataUrl.split(',')[1];
+    const r=await fetch(GAS_URL,{
+      method:'POST',
+      body:JSON.stringify({action:'savePhoto', data:{base64, filename, mimeType:'image/jpeg'}})
+    });
+    const json=await r.json();
+    if(json&&json.ok&&json.url) return json.url;
+  }catch(e){console.warn('照片上傳失敗，改用本機暫存',e);}
+  return base64DataUrl; // 上傳失敗時退回 base64
+}
+
+async function saveDispatch(){
   syncDispatchVitals();
   const date=document.getElementById('dp-date').value;
   const items=bookings.filter(b=>b.date===date);
-  items.forEach((b,i)=>{
+
+  // 顯示儲存中狀態
+  const alertEl=document.getElementById('dp-alert');
+  alertEl.textContent='⟳ 儲存中，請稍候…';
+  alertEl.className='alert alert-s show';
+
+  for(let i=0;i<items.length;i++){
+    const b=items[i];
     const idx=bookings.findIndex(x=>x.id===b.id);
-    if(idx<0)return;
-    // 取得照片 dataUrl（若已拍照則存入，否則保留舊值）
+    if(idx<0)continue;
+
     const photoImg=document.getElementById('photo-img-'+i);
-    const photoData=(photoImg&&photoImg.src&&photoImg.src.startsWith('data:'))?photoImg.src:(bookings[idx].photoData||'');
     const photoTime=document.getElementById('photo-time-'+i)?.textContent||bookings[idx].photoTime||'';
+    let photoData=bookings[idx].photoData||'';
+
+    // 只有「本次新拍」的照片才上傳；已存 URL 或無照片則跳過
+    if(photoImg&&photoImg.dataset.newPhoto==='1'&&photoImg.src.startsWith('data:')){
+      showSync('⟳ 上傳照片…','#C9A8E0');
+      const fname=`photo_${b.id||i}_${date}.jpg`;
+      photoData=await uploadPhotoToGAS(photoImg.src, fname);
+      photoImg.dataset.newPhoto=''; // 清除新拍標記，避免重複上傳
+    }
+
     bookings[idx]={...bookings[idx],
       dispatched:true,
       phone: bookings[idx].phone || (USERS[bookings[idx].user]&&USERS[bookings[idx].user].phone) || '',
@@ -1054,10 +1096,13 @@ function saveDispatch(){
       photoData,
       photoTime
     };
-  });
-  save();renderBkList();
-  document.getElementById('dp-alert').classList.add('show');
-  setTimeout(()=>document.getElementById('dp-alert').classList.remove('show'),3000);
+  }
+
+  await save();
+  renderBkList();
+  alertEl.textContent='✓ 派車單已確認並儲存';
+  alertEl.className='alert alert-s show';
+  setTimeout(()=>alertEl.classList.remove('show'),3500);
 }
 
 function toggleDpUser(i){
@@ -1520,20 +1565,22 @@ function randomFillVitals(){
   }
   function rndHR(){return String(70+Math.floor(Math.random()*12));} // 70~81
 
+  // ── 只對有派車預約的日期隨機填入（與派車單一致）──
+  const bookedDts=new Set(bookings.filter(b=>{
+    const bd=new Date(String(b.date).split('T')[0]+'T00:00:00');
+    return(bd.getFullYear()-1911)===parseInt(y)&&(bd.getMonth()+1)===parseInt(m);
+  }).map(b=>String(b.date).split('T')[0]));
   const promises=[];
-  for(let d=1;d<=days;d++){
-    const dt=`${y_ad}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    // 跳過週六（6）及週日（0）
-    const dow=new Date(dt).getDay();
-    if(dow===0||dow===6)continue;
+  [...bookedDts].sort().forEach(dt=>{
     // 已有資料不覆蓋
-    if(getVital(dt,'temp')&&getVital(dt,'bp')&&getVital(dt,'hr'))continue;
+    if(getVital(dt,'temp')&&getVital(dt,'bp')&&getVital(dt,'hr'))return;
     promises.push(
       saveVital(dt,'temp',rndTemp()),
       saveVital(dt,'bp',rndBP()),
       saveVital(dt,'hr',rndHR())
     );
-  }
+  });
+  if(!promises.length){alert('本月無派車紀錄，無法隨機填入。');return;}
   Promise.allSettled(promises).then(()=>{
     genVitals();
     showSync('✓ 已隨機填入本月生命徵象（平日，正常值）');
@@ -1547,11 +1594,26 @@ function genVitals(){
   const days=new Date(y_ad,m,0).getDate();
   const out=document.getElementById('vt-out');
 
-  // Build date list for this month
-  const dates=[];
+  // ── 只取本月有派車預約的日期（與派車單、出勤紀錄一致）──
+  const allDates=[];
   for(let d=1;d<=days;d++){
-    const dt=`${y_ad}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    dates.push(dt);
+    allDates.push(`${y_ad}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+  }
+  const bookedDates=new Set(bookings.filter(b=>{
+    const bd=new Date(String(b.date).split('T')[0]+'T00:00:00');
+    return(bd.getFullYear()-1911)===parseInt(y)&&(bd.getMonth()+1)===parseInt(m);
+  }).map(b=>String(b.date).split('T')[0]));
+  // 有 vitals 資料的日期也補入（避免資料遺失）
+  allDates.forEach(dt=>{
+    if(getVital(dt,'temp')||getVital(dt,'bp')||getVital(dt,'hr')) bookedDates.add(dt);
+  });
+  const dates=[...bookedDates].sort();
+  if(!dates.length){
+    out.innerHTML=`<div class="card" style="color:var(--muted);text-align:center;padding:28px">
+      本月（民國 ${y} 年 ${m} 月）無派車紀錄，生命徵象月報無資料可顯示。<br>
+      <span style="font-size:11px;margin-top:6px;display:block">請先在「使用者預約」或「派車單」建立本月紀錄。</span>
+    </div>`;
+    return;
   }
 
   let rows='';
@@ -1584,7 +1646,7 @@ function genVitals(){
   });
 
   out.innerHTML=`<div class="stats-bar" style="margin-top:12px">
-    <div class="stat-card"><div class="stat-lbl">本月天數</div><div class="stat-val">${days}</div></div>
+    <div class="stat-card"><div class="stat-lbl">本月派車天數</div><div class="stat-val">${dates.length}</div></div>
     <div class="stat-card"><div class="stat-lbl">已記錄天數</div><div class="stat-val" style="color:var(--mint)">${recorded.length}</div></div>
     <div class="stat-card"><div class="stat-lbl">異常紀錄</div><div class="stat-val" style="color:${abnormal.length>0?'#C0334A':'var(--mint)'}">${abnormal.length}</div></div>
   </div>
