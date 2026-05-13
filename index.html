@@ -472,6 +472,14 @@ tr:hover td{background:#F8FBFD}
       <button class="btn btn-teal" onclick="genDailyReport()">📋 生成日別報表</button>
       <button class="btn btn-p" onclick="saveDispatch()">確認完成</button>
     </div>
+    <div style="margin-top:14px;padding:14px 16px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:10px;letter-spacing:.04em">📅 月別派車彙整報表</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="field" style="margin:0"><label style="font-size:11px">民國年份</label><input type="number" id="mr-y" value="115" min="110" max="130" style="width:72px"></div>
+        <div class="field" style="margin:0"><label style="font-size:11px">月份</label><select id="mr-m" style="width:72px"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5" selected>5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></div>
+        <button class="btn btn-p" style="margin-top:16px" onclick="genMonthlyReport()">📊 產生月別報表</button>
+      </div>
+    </div>
     <div class="alert alert-s" id="dp-alert">✓ 派車單已確認完成。</div>
     <!-- 日別報表 modal -->
     <div id="daily-report-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;overflow-y:auto;padding:20px 0">
@@ -488,6 +496,24 @@ tr:hover td{background:#F8FBFD}
           <button class="btn btn-amber" onclick="exportDailyReportPDF()">⬇ 匯出 PDF</button>
           <button class="btn btn-o" onclick="closeDailyReport()">關閉</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 月別報表 Modal ===== -->
+  <div id="mr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:9999;overflow-y:auto;padding:20px 0">
+    <div style="background:#fff;max-width:960px;margin:0 auto;border-radius:14px;box-shadow:0 12px 48px rgba(0,0,0,.25);overflow:hidden">
+      <div style="background:#042C53;padding:18px 26px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="color:#B5D4F4;font-size:11px;letter-spacing:.06em">嘉義縣平安家園多元關懷協會</div>
+          <div id="mr-modal-title" style="color:#fff;font-size:17px;font-weight:700;margin-top:3px">BD03 交通接送服務 月別派車彙整報表</div>
+        </div>
+        <button onclick="document.getElementById('mr-modal').style.display='none'" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;width:34px;height:34px;border-radius:50%;cursor:pointer">✕</button>
+      </div>
+      <div id="mr-modal-body" style="padding:0"></div>
+      <div style="padding:14px 24px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #e8e8e8;background:#fafafa">
+        <button class="btn btn-amber" onclick="printMonthlyReport()">🖨 列印 / 儲存 PDF</button>
+        <button class="btn btn-o" onclick="document.getElementById('mr-modal').style.display='none'">關閉</button>
       </div>
     </div>
   </div>
@@ -1489,6 +1515,175 @@ function exportDispatchExcel(){
   XLSX.writeFile(wb,`平安家園_BD03_派車單_${date}.xlsx`);
 }
 
+
+/* ===== 月別派車彙整報表 ===== */
+function genMonthlyReport(){
+  const y=document.getElementById('mr-y').value;
+  const m=document.getElementById('mr-m').value;
+  const y_ad=parseInt(y)+1911;
+  const items=filterByMonth(y,m);
+  if(!items.length){alert(`民國 ${y} 年 ${m} 月無派車紀錄`);return;}
+
+  const dates=uniqueDates(items);
+  const totalFee=items.reduce((s,b)=>{
+    const gf=parseFloat(b.gfee)||0,rf=parseFloat(b.rfee)||0;
+    return s+gf+rf;
+  },0);
+  const dispatchedCount=items.filter(b=>b.dispatched).length;
+
+  // ── 統計摘要卡 ──
+  let summaryHtml=`
+  <div style="background:#f4f8ff;padding:18px 24px;border-bottom:1px solid #dde5f0">
+    <div style="font-size:13px;color:#5a6a82;margin-bottom:6px">民國 ${y} 年 ${m} 月　車號：BEW-0903　駕駛員：林智仁</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div style="background:#fff;border-radius:10px;padding:12px 20px;min-width:100px;text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#8a9ab0;margin-bottom:3px">出車天數</div>
+        <div style="font-size:26px;font-weight:700;color:#042C53">${dates.length}</div>
+      </div>
+      <div style="background:#fff;border-radius:10px;padding:12px 20px;min-width:100px;text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#8a9ab0;margin-bottom:3px">服務人次</div>
+        <div style="font-size:26px;font-weight:700;color:#2D7A6A">${items.length}</div>
+      </div>
+      <div style="background:#fff;border-radius:10px;padding:12px 20px;min-width:100px;text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#8a9ab0;margin-bottom:3px">已派車確認</div>
+        <div style="font-size:26px;font-weight:700;color:#C9A8E0">${dispatchedCount}</div>
+      </div>
+      <div style="background:#fff;border-radius:10px;padding:12px 20px;min-width:120px;text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.07)">
+        <div style="font-size:11px;color:#8a9ab0;margin-bottom:3px">月累計車資</div>
+        <div style="font-size:26px;font-weight:700;color:#C06030">NT$ ${Math.round(totalFee).toLocaleString()}</div>
+      </div>
+    </div>
+  </div>`;
+
+  // ── 逐日區塊 ──
+  let daysHtml='';
+  dates.forEach(dt=>{
+    const dayItems=items.filter(b=>b.date===dt);
+    const d=new Date(dt);
+    const rocDate=`民國${d.getFullYear()-1911}年${d.getMonth()+1}月${d.getDate()}日`;
+    const wd='（星期'+WD[d.getDay()]+'）';
+    const dayFee=dayItems.reduce((s,b)=>(parseFloat(b.gfee)||0)+(parseFloat(b.rfee)||0)+s,0);
+
+    // 照片區：每位乘客一格，最多4欄
+    let photoGridHtml='';
+    const photoItems=dayItems.filter(b=>b.photoData);
+    if(photoItems.length){
+      photoGridHtml=`<div style="margin:12px 0 4px;font-size:11px;font-weight:600;color:#8a9ab0;letter-spacing:.04em">搭乘照片</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:8px">
+        ${photoItems.map(b=>{
+          const isUrl=b.photoData.startsWith('http');
+          const imgSrc=isUrl?`https://drive.google.com/thumbnail?id=${b.photoData.match(/id=([^&]+)/)?.[1]}&sz=w320`:b.photoData;
+          return `<div style="border-radius:8px;overflow:hidden;border:1px solid #e0e7f0;background:#f8fafc">
+            <img src="${imgSrc}" alt="${b.user}" style="width:100%;height:120px;object-fit:cover;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;height:120px;align-items:center;justify-content:center;color:#bbb;font-size:11px">圖片載入失敗</div>
+            <div style="padding:5px 8px;font-size:11px;font-weight:600;color:#042C53;background:#f0f4fa">${b.user}</div>
+            ${b.photoTime?`<div style="padding:2px 8px 6px;font-size:10px;color:#8a9ab0">${b.photoTime.replace('拍攝時間：','')}</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>`;
+    } else {
+      photoGridHtml=`<div style="margin:10px 0;padding:8px 12px;background:#fffbe8;border-radius:6px;font-size:11px;color:#b08030;border:1px dashed #e8d88a">本日尚無搭乘照片</div>`;
+    }
+
+    // 乘客明細表
+    let tableRows=dayItems.map((b,i)=>{
+      const gf=parseFloat(b.gfee)||0, rf=parseFloat(b.rfee)||0;
+      const rowBg=i%2===0?'#f8fafc':'#fff';
+      return `<tr style="background:${rowBg}">
+        <td style="padding:6px 10px;font-weight:600;color:#042C53;white-space:nowrap">${b.user}</td>
+        <td style="padding:6px 8px;font-size:11px;color:#5a6a82">${b.gender||'—'}</td>
+        <td style="padding:6px 8px;font-size:10px;color:#5a6a82;max-width:140px">${b.addr||'—'}</td>
+        <td style="padding:6px 8px;font-size:10px;color:#5a6a82">${b.gdep||'—'} → ${b.garr||'—'}</td>
+        <td style="padding:6px 8px;font-size:10px;color:#5a6a82;text-align:right">${b.gkm?b.gkm+'km':'—'}</td>
+        <td style="padding:6px 8px;font-size:10px;color:#5a6a82">${b.rdep||'—'} → ${b.rarr||'—'}</td>
+        <td style="padding:6px 8px;font-size:10px;color:#5a6a82;text-align:right">${b.rkm?b.rkm+'km':'—'}</td>
+        <td style="padding:6px 10px;font-weight:700;color:#C06030;text-align:right;white-space:nowrap">NT$ ${Math.round(gf+rf)}</td>
+        <td style="padding:6px 8px;text-align:center">${b.dispatched?'<span style="color:#2D7A6A;font-size:12px">✓</span>':'<span style="color:#bbb;font-size:12px">—</span>'}</td>
+      </tr>`;
+    }).join('');
+
+    daysHtml+=`
+    <div style="margin:0;border-bottom:3px solid #dde5f0" class="mr-day-block">
+      <div style="background:#e8eef8;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        <div>
+          <span style="font-weight:700;font-size:14px;color:#042C53">${rocDate}</span>
+          <span style="font-size:13px;color:#5a6a82;margin-left:4px">${wd}</span>
+          <span style="margin-left:12px;font-size:11px;background:#042C53;color:#fff;padding:2px 8px;border-radius:10px">${dayItems.length} 人次</span>
+        </div>
+        <div style="font-weight:700;color:#C06030;font-size:14px">NT$ ${Math.round(dayFee).toLocaleString()} ▾</div>
+      </div>
+      <div style="padding:16px 24px">
+        ${photoGridHtml}
+        <div style="overflow-x:auto;margin-top:4px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#042C53;color:#fff">
+                <th style="padding:7px 10px;text-align:left;white-space:nowrap">姓名</th>
+                <th style="padding:7px 8px">性別</th>
+                <th style="padding:7px 8px;text-align:left">案家地址</th>
+                <th style="padding:7px 8px;text-align:left;white-space:nowrap">去程時間</th>
+                <th style="padding:7px 8px;white-space:nowrap">去程里程</th>
+                <th style="padding:7px 8px;text-align:left;white-space:nowrap">回程時間</th>
+                <th style="padding:7px 8px;white-space:nowrap">回程里程</th>
+                <th style="padding:7px 10px;text-align:right;white-space:nowrap">合計車資</th>
+                <th style="padding:7px 8px;text-align:center;white-space:nowrap">確認</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+            <tfoot>
+              <tr style="background:#f0f4fa;font-weight:700">
+                <td colspan="7" style="padding:7px 10px;font-size:12px;color:#5a6a82">本日小計</td>
+                <td style="padding:7px 10px;text-align:right;color:#C06030;font-size:13px">NT$ ${Math.round(dayFee).toLocaleString()}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  // ── 月合計 footer ──
+  let footerHtml=`
+  <div style="padding:16px 24px;background:#042C53;display:flex;justify-content:space-between;align-items:center">
+    <div style="color:#B5D4F4;font-size:13px">月合計　${dates.length} 出車天 ／ ${items.length} 人次</div>
+    <div style="color:#fff;font-size:20px;font-weight:700">NT$ ${Math.round(totalFee).toLocaleString()}</div>
+  </div>`;
+
+  document.getElementById('mr-modal-title').textContent=`BD03 月別派車彙整報表　民國 ${y} 年 ${m} 月`;
+  document.getElementById('mr-modal-body').innerHTML=summaryHtml+daysHtml+footerHtml;
+  document.getElementById('mr-modal').style.display='block';
+}
+
+function printMonthlyReport(){
+  const body=document.getElementById('mr-modal-body');
+  if(!body)return;
+  const y=document.getElementById('mr-y').value;
+  const m=document.getElementById('mr-m').value;
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>平安家園_BD03_月別派車彙整報表_${y}年${m}月</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'微軟正黑體','新細明體',sans-serif;margin:0;padding:0;color:#1a2030}
+    @page{margin:12mm 10mm}
+    @media print{.no-print{display:none!important}.mr-day-block>div:last-child{display:block!important}}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th,td{border:1px solid #dde5f0;padding:5px 7px}
+    th{background:#042C53;color:#fff}
+    tr:nth-child(even){background:#f8fafc}
+    img{max-width:100%;height:auto}
+  </style></head><body>
+  <div style="text-align:center;padding:12px 0 6px;border-bottom:2px solid #042C53;margin-bottom:12px">
+    <div style="font-size:11px;color:#5a6a82">嘉義縣平安家園多元關懷協會</div>
+    <div style="font-size:17px;font-weight:700;color:#042C53">BD03 交通接送服務 月別派車彙整報表</div>
+    <div style="font-size:12px;color:#5a6a82;margin-top:3px">民國 ${y} 年 ${m} 月　車號：BEW-0903　駕駛員：林智仁</div>
+  </div>
+  ${body.innerHTML}
+  </body></html>`);
+  win.document.close();
+  setTimeout(()=>{win.focus();win.print();},600);
+}
 
 /* ===== 生命徵象月報 ===== */
 let vitalsData={};
