@@ -1524,6 +1524,16 @@ function genMonthlyReport(){
   const items=filterByMonth(y,m);
   if(!items.length){alert(`民國 ${y} 年 ${m} 月無派車紀錄`);return;}
 
+  // 確保 bookings 是最新的（從 localStorage 補回可能遺漏的 photoData）
+  const rawStored=JSON.parse(localStorage.getItem('pg_bookings')||'[]');
+  items.forEach(b=>{
+    if(!b.photoData){
+      const stored=rawStored.find(s=>String(s.id)===String(b.id));
+      if(stored&&stored.photoData) b.photoData=stored.photoData;
+      if(stored&&stored.photoTime&&!b.photoTime) b.photoTime=stored.photoTime;
+    }
+  });
+
   const dates=uniqueDates(items);
   const totalFee=items.reduce((s,b)=>{
     const gf=parseFloat(b.gfee)||0,rf=parseFloat(b.rfee)||0;
@@ -1564,25 +1574,30 @@ function genMonthlyReport(){
     const wd='（星期'+WD[d.getDay()]+'）';
     const dayFee=dayItems.reduce((s,b)=>(parseFloat(b.gfee)||0)+(parseFloat(b.rfee)||0)+s,0);
 
-    // 照片區：每位乘客一格，最多4欄
+    // 照片區：每位乘客一格
+    // 直接從 bookings 記憶體取 photoData（不依賴 DOM，跨日皆可用）
     let photoGridHtml='';
-    const photoItems=dayItems.filter(b=>b.photoData);
+    const photoItems=dayItems.map(b=>{
+      const photoData=b.photoData||'';
+      const photoTime=b.photoTime||'';
+      return photoData?{b,photoData,photoTime}:null;
+    }).filter(Boolean);
     if(photoItems.length){
-      photoGridHtml=`<div style="margin:12px 0 4px;font-size:11px;font-weight:600;color:#8a9ab0;letter-spacing:.04em">搭乘照片</div>
+      photoGridHtml=`<div style="margin:12px 0 4px;font-size:11px;font-weight:600;color:#8a9ab0;letter-spacing:.04em">📷 搭乘確認照片</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:8px">
-        ${photoItems.map(b=>{
-          const isUrl=b.photoData.startsWith('http');
-          const imgSrc=isUrl?`https://drive.google.com/thumbnail?id=${b.photoData.match(/id=([^&]+)/)?.[1]}&sz=w320`:b.photoData;
-          return `<div style="border-radius:8px;overflow:hidden;border:1px solid #e0e7f0;background:#f8fafc">
-            <img src="${imgSrc}" alt="${b.user}" style="width:100%;height:120px;object-fit:cover;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-            <div style="display:none;height:120px;align-items:center;justify-content:center;color:#bbb;font-size:11px">圖片載入失敗</div>
-            <div style="padding:5px 8px;font-size:11px;font-weight:600;color:#042C53;background:#f0f4fa">${b.user}</div>
-            ${b.photoTime?`<div style="padding:2px 8px 6px;font-size:10px;color:#8a9ab0">${b.photoTime.replace('拍攝時間：','')}</div>`:''}
-          </div>`;
-        }).join('')}
+        ${photoItems.map(({b,photoData,photoTime})=>`
+          <div style="border-radius:8px;overflow:hidden;border:1px solid #dde6f0;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.06)">
+            <img src="${photoData}" alt="${b.user}" style="width:100%;height:130px;object-fit:cover;display:block"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div style="display:none;height:130px;align-items:center;justify-content:center;color:#bbb;font-size:11px;background:#f8fafc">無法載入圖片</div>
+            <div style="padding:6px 10px;border-top:1px solid #edf0f4;background:#f4f8ff">
+              <div style="font-size:12px;font-weight:700;color:#042C53">${b.user}</div>
+              ${photoTime?`<div style="font-size:10px;color:#8a9ab0;margin-top:1px">${photoTime.replace('拍攝時間：','')}</div>`:''}
+            </div>
+          </div>`).join('')}
       </div>`;
     } else {
-      photoGridHtml=`<div style="margin:10px 0;padding:8px 12px;background:#fffbe8;border-radius:6px;font-size:11px;color:#b08030;border:1px dashed #e8d88a">本日尚無搭乘照片</div>`;
+      photoGridHtml=`<div style="margin:10px 0;padding:8px 12px;background:#fffbe8;border-radius:6px;font-size:11px;color:#b08030;border:1px dashed #e8d88a">⚠ 本日尚無搭乘照片（請先在派車單確認並儲存照片）</div>`;
     }
 
     // 乘客明細表
