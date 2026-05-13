@@ -180,23 +180,35 @@ tr:hover td{background:#F8FBFD}
 .tr-go{background:#F8FBFD}.tr-ret{background:#FFFDF5}
 .tr-sum{background:#EBF5FB;font-weight:700}
 /* ─── Booking list ─── */
+/* ── 預約列表：日期分組 ── */
+.bk-day-group{margin-bottom:14px;border-radius:10px;overflow:hidden;border:1px solid #D5DCE8;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.bk-day-header{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px;
+  background:linear-gradient(90deg,#042C53 0%,#0C447C 100%);
+  color:#fff;cursor:pointer;user-select:none;
+}
+.bk-day-roc{font-size:15px;font-weight:700;letter-spacing:.03em;flex:1}
+.bk-day-wd{font-size:12px;color:#B5D4F4;font-weight:500}
+.bk-day-badge{background:rgba(255,255,255,.18);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap}
+.bk-day-status{font-size:11px;color:#7DC9B8;font-weight:600;white-space:nowrap}
+.bk-day-body{background:#fff}
 .bk-item{
   display:flex;align-items:center;gap:10px;
-  padding:10px 14px;
-  background:#fff;
-  border-radius:4px;border:1px solid #D5D8DC;
-  margin-bottom:8px;flex-wrap:wrap;
-  box-shadow:0 1px 3px rgba(0,0,0,.05);
-  transition:box-shadow .15s;
+  padding:11px 16px;
+  border-bottom:1px solid #EDF0F5;
+  flex-wrap:wrap;
+  transition:background .12s;
 }
-.bk-item:hover{box-shadow:0 2px 6px rgba(0,0,0,.10)}
-.bk-name{font-weight:700;min-width:70px;color:var(--td)}
-.bk-date{color:var(--muted);font-size:12px;min-width:120px;font-weight:500}
-.bk-addr{color:var(--muted);font-size:12px;flex:1}
+.bk-item:last-child{border-bottom:none}
+.bk-item:hover{background:#F6F9FF}
+.bk-name{font-weight:700;font-size:13px;min-width:68px;color:var(--td)}
+.bk-addr{color:var(--muted);font-size:11px;flex:1;min-width:80px}
+.bk-note{color:#a0845a;font-size:11px;font-style:italic}
 .bk-del{
   background:none;border:1px solid #CCD1D9;
-  border-radius:3px;padding:3px 10px;font-size:11px;
-  color:var(--muted);cursor:pointer;font-weight:500;transition:all .15s;
+  border-radius:4px;padding:3px 10px;font-size:11px;
+  color:var(--muted);cursor:pointer;font-weight:500;transition:all .15s;margin-left:auto;
 }
 .bk-del:hover{background:#FDEDEC;color:#922B21;border-color:#F5B7B1}
 /* ─── Month picker ─── */
@@ -262,10 +274,11 @@ tr:hover td{background:#F8FBFD}
   .btn-row{gap:6px;justify-content:stretch}
   .btn-row .btn{flex:1;text-align:center;justify-content:center}
   .tag{font-size:10px;padding:2px 6px}
-  .bk-item{padding:9px 11px;gap:7px}
+  .bk-day-header{padding:9px 12px}
+  .bk-day-roc{font-size:13px}
+  .bk-item{padding:10px 12px;gap:7px}
   .bk-name{font-size:13px;min-width:56px}
-  .bk-date{font-size:11px;min-width:90px}
-  .bk-addr{font-size:11px}
+  .bk-addr{font-size:10px}
   .bk-del{font-size:10px;padding:3px 8px}
   .stats-bar{grid-template-columns:1fr 1fr;gap:8px}
   .stat-val{font-size:20px}
@@ -373,7 +386,10 @@ tr:hover td{background:#F8FBFD}
   <div class="alert alert-e" id="bk-err"></div>
 
   <div id="bk-list-sec" style="display:none;margin-top:16px">
-    <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:10px">已儲存預約（<span id="bk-count">0</span> 筆）</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:13px;font-weight:700;color:var(--td)">預約列表</div>
+      <div style="font-size:12px;color:var(--muted)">共 <span id="bk-count" style="font-weight:700;color:var(--td)">0</span> 筆 ／ <span id="bk-day-count" style="font-weight:700;color:var(--td)">0</span> 天</div>
+    </div>
     <div id="bk-list"></div>
   </div>
 </div>
@@ -875,15 +891,51 @@ function renderBkList(){
   document.getElementById('bk-count').textContent=bookings.length;
   if(!bookings.length){sec.style.display='none';return;}
   sec.style.display='block';
-  list.innerHTML=[...bookings].sort((a,b)=>a.date.localeCompare(b.date)||(a.id>b.id?1:-1)).map(b=>`
-    <div class="bk-item">
-      <span class="bk-name">${b.user}</span>
-      <span class="bk-date">${b.date} ${b.wd}</span>
-      <span class="bk-addr">${b.addr}</span>
-      <span class="tag ${b.companion==='有'?'tag-low':'tag-general'}">${b.companion==='有'?'有陪同':'無陪同'}</span>
-      <span class="tag ${b.dispatched?'tag-teal':'tag-general'}">${b.dispatched?'已派車':'待派車'}</span>
-      <button class="bk-del" onclick="delBooking('${b.id}')">刪除</button>
-    </div>`).join('');
+
+  // 依日期排序後分組
+  const sorted=[...bookings].sort((a,b)=>a.date.localeCompare(b.date)||(a.id>b.id?1:-1));
+  const groups={};
+  sorted.forEach(b=>{
+    if(!groups[b.date]) groups[b.date]=[];
+    groups[b.date].push(b);
+  });
+  const dates=Object.keys(groups).sort();
+  document.getElementById('bk-day-count').textContent=dates.length;
+
+  list.innerHTML=dates.map(dt=>{
+    const d=new Date(dt+'T00:00:00');
+    const roc=`${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    const wd='星期'+WD[d.getDay()];
+    const gList=groups[dt];
+    const dispatchedN=gList.filter(b=>b.dispatched).length;
+    const allDone=dispatchedN===gList.length;
+    const statusTxt=allDone
+      ?`<span class="bk-day-status">✓ 已全數派車</span>`
+      :`<span style="font-size:11px;color:#F0B070;font-weight:600">${dispatchedN}/${gList.length} 已派車</span>`;
+
+    const items=gList.map(b=>`
+      <div class="bk-item">
+        <span class="bk-name">${b.user}</span>
+        <span class="tag" style="font-size:10px;padding:2px 7px;${b.gender==='女'?'background:#FCE4EC;color:#C2185B':'background:#E3F2FD;color:#1565C0'}">${b.gender||'—'}</span>
+        <span class="tag ${b.welfare==='一般戶'?'tag-general':'tag-low'}" style="font-size:10px;padding:2px 7px">${b.welfare||'一般戶'}</span>
+        <span class="tag ${b.companion==='有'?'tag-low':'tag-general'}" style="font-size:10px;padding:2px 7px">${b.companion==='有'?'陪同':'無陪'}</span>
+        <span class="bk-addr">${b.addr||b.dest||'—'}</span>
+        ${b.note?`<span class="bk-note">📝 ${b.note}</span>`:''}
+        <span class="tag ${b.dispatched?'tag-teal':'tag-general'}" style="font-size:10px;padding:2px 7px">${b.dispatched?'已派車':'待派'}</span>
+        <button class="bk-del" onclick="delBooking('${b.id}')">刪除</button>
+      </div>`).join('');
+
+    return `<div class="bk-day-group">
+      <div class="bk-day-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        <div class="bk-day-roc">📅 ${roc}</div>
+        <div class="bk-day-wd">${wd}</div>
+        <div class="bk-day-badge">${gList.length} 人</div>
+        ${statusTxt}
+        <span style="color:#B5D4F4;font-size:14px;margin-left:4px">▾</span>
+      </div>
+      <div class="bk-day-body">${items}</div>
+    </div>`;
+  }).join('');
 }
 
 /* ---- Module 2 ---- */
