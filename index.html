@@ -706,21 +706,35 @@ let bookings=[];
 
 async function loadBookings(){
   showSync('⟳ 載入預約紀錄…','#C9A8E0');
+  // 先讀本機快取，以便後續合併照片資料
+  const cached=JSON.parse(localStorage.getItem('pg_bookings')||'[]');
+  const cachedMap={};
+  cached.forEach(b=>{ cachedMap[String(b.id)]=b; });
+
+  function mergeBooking(b){
+    // 從雲端載入時，photoData / photoTime 可能因 Sheets 大小限制而遺失
+    // → 優先保留本機快取裡的照片資料
+    const local=cachedMap[String(b.id)]||{};
+    return {
+      ...b,
+      id:String(b.id),
+      date: b.date ? String(b.date).split('T')[0] : b.date,
+      wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : ''),
+      phone: b.phone || b.Phone || b.tel || b.Tel || (USERS[b.user]&&USERS[b.user].phone) || '',
+      photoData: b.photoData || local.photoData || '',
+      photoTime: b.photoTime || local.photoTime || ''
+    };
+  }
+
   try{
     const r=await gasGet('getBookings');
     if(r&&r.ok){
       if(r.data.length){
-        bookings=r.data.map(b=>({
-          ...b,
-          id:String(b.id),
-          date: b.date ? String(b.date).split('T')[0] : b.date,
-          wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : ''),
-          phone: b.phone || b.Phone || b.tel || b.Tel || (USERS[b.user]&&USERS[b.user].phone) || ''
-        }));
+        bookings=r.data.map(mergeBooking);
+        // 存回 localStorage（含照片資料）
         localStorage.setItem('pg_bookings',JSON.stringify(bookings));
         showSync('✓ 預約紀錄已同步');
       } else {
-        const cached=JSON.parse(localStorage.getItem('pg_bookings')||'[]');
         if(cached.length){
           bookings=cached.map(b=>({
             ...b,
@@ -738,7 +752,7 @@ async function loadBookings(){
     }
   }catch(e){
     showSync('⚠ 網路錯誤，使用本機暫存','#F5A27A');
-    bookings=JSON.parse(localStorage.getItem('pg_bookings')||'[]');
+    bookings=cached;
   }
   renderBkList();
 }
