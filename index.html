@@ -1337,22 +1337,7 @@ function genRecord(){
       </table>
     </div>
   </div>`;
-  /* ---- 時間衝突勾稽 ---- */
-  let conflictBanner='';
-  dates.forEach(dt=>{
-    const day=items.filter(b=>b.date===dt);
-    const warns=checkTimeConflicts(day);
-    if(warns.length){
-      const rocD=rocFmt(dt,true);
-      conflictBanner+=`<div style="font-size:12px;color:#6B4F00;padding:4px 0;border-bottom:1px solid #F5DEB3"><span style="font-weight:700">${rocD}：</span>${warns.map(w=>w.label).join('　')}</div>`;
-    }
-  });
-  if(conflictBanner){
-    const banner=document.createElement('div');
-    banner.style.cssText='background:#FFF3CD;border:1px solid #F5C518;border-radius:8px;padding:10px 14px;margin-bottom:12px';
-    banner.innerHTML=`<div style="font-weight:700;color:#856404;margin-bottom:6px;font-size:13px">⚠️ 行程時間勾稽警示</div>${conflictBanner}`;
-    out.insertBefore(banner,out.firstChild);
-  }
+  // 時間勾稽警示已停用
 }
 
 /* ---- Module 4 ---- */
@@ -2137,12 +2122,8 @@ function genDailyReport(){
   const hr=document.getElementById('dp-hr').value;
 
   /* — 時間衝突勾稽 — */
-  const conflicts=checkTimeConflicts(items);
-  const conflictHTML=conflicts.length?`
-    <div style="margin:0 24px 16px;background:#FFF3CD;border:1px solid #F5C518;border-radius:8px;padding:10px 14px">
-      <div style="font-weight:700;color:#856404;margin-bottom:6px;font-size:13px">行程時間勾稽警示</div>
-      ${conflicts.map(w=>`<div style="font-size:12px;color:#6B4F00;padding:3px 0;border-bottom:1px solid #F5DEB3">${w.label}</div>`).join('')}
-    </div>`:'';
+  const conflicts=[];
+  const conflictHTML='';
 
   let total=0;
   // 先蒐集每筆資料（含照片）
@@ -2161,8 +2142,7 @@ function genDailyReport(){
   });
   const rows=rowData.map(({b,gf,rf,gkm,rkm})=>{
     const gdep=b.gdep||'',garr=b.garr||'',rdep=b.rdep||'',rarr=b.rarr||'';
-    const rowConflict=conflicts.some(c=>c.label.includes(b.user));
-    const rowStyle=rowConflict?'background:#FFF8E7':'';
+    const rowStyle='';
     return `<tr style="${rowStyle}">
       <td style="padding:8px 10px;font-weight:700;font-size:13px;color:#042C53;white-space:nowrap">${b.user}</td>
       <td style="padding:8px 6px;font-size:11px;color:#555">${b.gender}</td>
