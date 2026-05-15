@@ -712,16 +712,20 @@ async function loadBookings(){
   cached.forEach(b=>{ cachedMap[String(b.id)]=b; });
 
   function mergeBooking(b){
-    // 從雲端載入時，photoData / photoTime 可能因 Sheets 大小限制而遺失
-    // → 優先保留本機快取裡的照片資料
+    // 優先順序：雲端 Drive URL > 本機 localStorage > 雲端 base64
     const local=cachedMap[String(b.id)]||{};
+    const cloudPhoto = (b.photoData && b.photoData.startsWith('http')) ? b.photoData : '';
+    const localPhoto = (local.photoData && local.photoData.startsWith('http')) ? local.photoData
+                     : (local.photoData || '');
+    const cloudBase64 = (b.photoData && b.photoData.startsWith('data:')) ? b.photoData : '';
+    const bestPhoto = cloudPhoto || localPhoto || cloudBase64;
     return {
       ...b,
       id:String(b.id),
       date: b.date ? String(b.date).split('T')[0] : b.date,
       wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : ''),
       phone: b.phone || b.Phone || b.tel || b.Tel || (USERS[b.user]&&USERS[b.user].phone) || '',
-      photoData: b.photoData || local.photoData || '',
+      photoData: bestPhoto,
       photoTime: b.photoTime || local.photoTime || ''
     };
   }
@@ -1101,7 +1105,7 @@ function loadDispatch(){
         const timeEl=document.getElementById('photo-time-'+i);
         const preview=document.getElementById('photo-preview-'+i);
         const idle=document.getElementById('photo-idle-'+i);
-        if(img)img.src=b.photoData;
+        if(img)img.src=driveImgSrc(b.photoData);
         if(timeEl)timeEl.textContent=b.photoTime||'';
         if(preview)preview.style.display='block';
         if(idle)idle.style.display='none';
@@ -1180,6 +1184,18 @@ function retakePhoto(i){
   const imgEl=document.getElementById('photo-img-'+i);
   imgEl.dataset.newPhoto=''; // 重拍時清除標記
   startCam(i);
+}
+
+// ── 將 Google Drive 分享連結轉換為可直接嵌入的 img src ──
+function driveImgSrc(photoData){
+  if(!photoData) return '';
+  // Drive 分享連結格式：https://drive.google.com/file/d/FILE_ID/view?...
+  // 或 https://drive.google.com/open?id=FILE_ID
+  // 或已是 /uc?export=view 格式
+  if(photoData.startsWith('data:')) return photoData; // base64 直接用
+  const m = photoData.match(/\/d\/([^\/\?&]+)/) || photoData.match(/[?&]id=([^&]+)/);
+  if(m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800`;
+  return photoData; // 其他 URL 直接用
 }
 
 // ── 上傳單張照片到 GAS Drive，回傳公開 URL ──
@@ -2137,7 +2153,8 @@ function genDailyReport(){
     const rkm=document.getElementById('dp-rkm-'+i)?.value||'—';
     // 讀取即時照片（畫面已拍但尚未儲存）或已存入 bookings 的照片
     const liveImg=document.getElementById('photo-img-'+i);
-    const photoData=(liveImg&&liveImg.src&&liveImg.src.startsWith('data:'))?liveImg.src:(b.photoData||'');
+    const livePhotoRaw=(liveImg&&liveImg.src&&liveImg.src!==location.href&&liveImg.src.length>10)?liveImg.src:'';
+    const photoData=livePhotoRaw||b.photoData||'';
     const photoTime=document.getElementById('photo-time-'+i)?.textContent||b.photoTime||'';
     total+=gf+rf;
     return {b,i,gf,rf,gkm,rkm,photoData,photoTime};
@@ -2164,7 +2181,8 @@ function genDailyReport(){
     </tr>`;
   }).join('');
   // 搭乘確認照片區塊
-  const photosWithData=rowData.filter(r=>r.photoData);
+  const rowData2=rowData.map(r=>({...r,photoData:r.b.photoData}));
+  const photosWithData=rowData2.filter(r=>r.photoData);
   const photosHTML=photosWithData.length?`
     <div style="margin-top:16px;border:1px solid #dde6f0;border-radius:8px;overflow:hidden">
       <div style="background:#0C447C;color:#E6F1FB;padding:8px 14px;font-size:12px;font-weight:700;letter-spacing:.05em">
@@ -2173,7 +2191,7 @@ function genDailyReport(){
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:14px;background:#F7F9FC">
         ${photosWithData.map(r=>`
           <div style="background:#fff;border:1px solid #dde6f0;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)">
-            <img src="${r.photoData}" style="width:100%;display:block;border-radius:6px 6px 0 0">
+            <img src="${driveImgSrc(r.photoData)}" style="width:100%;display:block;border-radius:6px 6px 0 0" onerror="this.style.display='none'">
             <div style="padding:6px 10px;border-top:1px solid #edf0f4">
               <div style="font-size:12px;font-weight:700;color:#042C53">${r.b.user}</div>
               <div style="font-size:10px;color:#8099B0;margin-top:2px">${r.photoTime||''}</div>
