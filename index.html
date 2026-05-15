@@ -928,29 +928,8 @@ async function quickDispatch(id){
   showSync('✓ 已快速派車：'+b.user,'#1E8449');
 }
 
-// ── 過期未派提醒：頁面載入時檢查並顯示警示 ──
-function checkOverdueBookings(){
-  const today=new Date().toISOString().split('T')[0];
-  const overdue=bookings.filter(b=>!b.dispatched && b.date < today);
-  const existing=document.getElementById('overdue-banner');
-  if(existing)existing.remove();
-  if(!overdue.length)return;
-  const byDate={};
-  overdue.forEach(b=>{
-    if(!byDate[b.date])byDate[b.date]=[];
-    byDate[b.date].push(b.user);
-  });
-  const lines=Object.entries(byDate).sort().map(([dt,users])=>{
-    const d=new Date(dt+'T00:00:00');
-    const roc=`${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
-    return `<span style="margin-right:14px">📅 ${roc}：${users.join('、')}</span>`;
-  }).join('');
-  const banner=document.createElement('div');
-  banner.id='overdue-banner';
-  banner.style.cssText='position:sticky;top:var(--header-h,64px);z-index:998;background:#FFF3CD;border-bottom:2px solid #FFCA28;padding:8px 20px;font-size:12px;color:#7D5A00;font-weight:600;display:flex;align-items:center;gap:10px;flex-wrap:wrap';
-  banner.innerHTML=`<span style="font-size:16px">⚠️</span><span style="margin-right:8px">以下預約已過期但尚未派車，請確認是否補派：</span>${lines}<button onclick="this.parentElement.remove()" style="margin-left:auto;background:none;border:none;font-size:16px;cursor:pointer;color:#7D5A00">✕</button>`;
-  document.querySelector('nav').insertAdjacentElement('afterend',banner);
-}
+// 過期未派提醒已停用
+function checkOverdueBookings(){}
 function renderBkList(){
   const list=document.getElementById('bk-list');
   const sec=document.getElementById('bk-list-sec');
@@ -1714,7 +1693,7 @@ function genMonthlyReport(){
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:8px">
         ${photoItems.map(({b,photoData,photoTime})=>`
           <div style="border-radius:8px;overflow:hidden;border:1px solid #dde6f0;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.06)">
-            <img src="${photoData}" alt="${b.user}" style="width:100%;height:130px;object-fit:cover;display:block"
+            <img src="${driveImgSrc(photoData)}" alt="${b.user}" style="width:100%;height:130px;object-fit:cover;display:block" onerror="this.style.display='none'"
               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
             <div style="display:none;height:130px;align-items:center;justify-content:center;color:#bbb;font-size:11px;background:#f8fafc">無法載入圖片</div>
             <div style="padding:6px 10px;border-top:1px solid #edf0f4;background:#f4f8ff">
