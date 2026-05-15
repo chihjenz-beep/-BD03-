@@ -875,18 +875,25 @@ function saveBooking(){
   if(!user||!date){err.textContent='請選擇使用者及日期';err.classList.add('show');return;}
   err.classList.remove('show');
   const u=USERS[user];
+  const bkDep=document.getElementById('bk-dep').value;
+  const bkRet=document.getElementById('bk-ret').value;
+  const today=new Date().toISOString().split('T')[0];
+  // 若預約日期已過，自動標記已派車並預填預設時間
+  const autoDispatched = (date < today);
   bookings.push({
     id:Date.now(),user,date,
     phone:u.phone,gender:u.gender,
     addr:u.addr,
     welfare:document.getElementById('bk-welfare').value||'一般戶',
     dest:document.getElementById('bk-dest').value,
-    dep:document.getElementById('bk-dep').value,
-    ret:document.getElementById('bk-ret').value,
+    dep:bkDep,
+    ret:bkRet,
     wd:document.getElementById('bk-wd').value,
     companion:document.getElementById('bk-companion').value,
     note:document.getElementById('bk-note').value,
-    dispatched:false
+    dispatched:autoDispatched,
+    gdep:autoDispatched?bkDep:'',
+    rdep:autoDispatched?bkRet:''
   });
   save();
   renderBkList();
@@ -898,6 +905,47 @@ function delBooking(id){
   if(!confirm('確認刪除此預約？'))return;
   bookings=bookings.filter(b=>String(b.id)!==String(id));
   save();renderBkList();
+}
+
+// ── 快速派車：直接在預約列表點一下標記已派車 ──
+async function quickDispatch(id){
+  const idx=bookings.findIndex(b=>String(b.id)===String(id));
+  if(idx<0)return;
+  const b=bookings[idx];
+  if(!confirm(`確認將「${b.user}」(${b.date}) 標記為已派車？`))return;
+  bookings[idx]={
+    ...bookings[idx],
+    dispatched:true,
+    gdep: bookings[idx].gdep || bookings[idx].dep || '',
+    rdep: bookings[idx].rdep || bookings[idx].ret || ''
+  };
+  await save();
+  renderBkList();
+  showSync('✓ 已快速派車：'+b.user,'#1E8449');
+}
+
+// ── 過期未派提醒：頁面載入時檢查並顯示警示 ──
+function checkOverdueBookings(){
+  const today=new Date().toISOString().split('T')[0];
+  const overdue=bookings.filter(b=>!b.dispatched && b.date < today);
+  const existing=document.getElementById('overdue-banner');
+  if(existing)existing.remove();
+  if(!overdue.length)return;
+  const byDate={};
+  overdue.forEach(b=>{
+    if(!byDate[b.date])byDate[b.date]=[];
+    byDate[b.date].push(b.user);
+  });
+  const lines=Object.entries(byDate).sort().map(([dt,users])=>{
+    const d=new Date(dt+'T00:00:00');
+    const roc=`${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    return `<span style="margin-right:14px">📅 ${roc}：${users.join('、')}</span>`;
+  }).join('');
+  const banner=document.createElement('div');
+  banner.id='overdue-banner';
+  banner.style.cssText='position:sticky;top:var(--header-h,64px);z-index:998;background:#FFF3CD;border-bottom:2px solid #FFCA28;padding:8px 20px;font-size:12px;color:#7D5A00;font-weight:600;display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+  banner.innerHTML=`<span style="font-size:16px">⚠️</span><span style="margin-right:8px">以下預約已過期但尚未派車，請確認是否補派：</span>${lines}<button onclick="this.parentElement.remove()" style="margin-left:auto;background:none;border:none;font-size:16px;cursor:pointer;color:#7D5A00">✕</button>`;
+  document.querySelector('nav').insertAdjacentElement('afterend',banner);
 }
 function renderBkList(){
   const list=document.getElementById('bk-list');
@@ -936,6 +984,7 @@ function renderBkList(){
         <span class="bk-addr">${b.addr||b.dest||'—'}</span>
         ${b.note?`<span class="bk-note">📝 ${b.note}</span>`:''}
         <span class="tag ${b.dispatched?'tag-teal':'tag-general'}" style="font-size:10px;padding:2px 7px">${b.dispatched?'已派車':'待派'}</span>
+        ${!b.dispatched?`<button class="bk-del" style="background:#EAFAF1;color:#1E8449;border-color:#A9DFBF;font-weight:700" onclick="quickDispatch('${b.id}')">✓ 快速派車</button>`:''}
         <button class="bk-del" onclick="delBooking('${b.id}')">刪除</button>
       </div>`).join('');
 
@@ -950,6 +999,7 @@ function renderBkList(){
       <div class="bk-day-body">${items}</div>
     </div>`;
   }).join('');
+  checkOverdueBookings();
 }
 
 /* ---- Module 2 ---- */
