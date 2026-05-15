@@ -1232,12 +1232,21 @@ async function saveDispatch(){
     const photoTime=document.getElementById('photo-time-'+i)?.textContent||bookings[idx].photoTime||'';
     let photoData=bookings[idx].photoData||'';
 
-    // 只有「本次新拍」的照片才上傳；已存 URL 或無照片則跳過
+    // 有新拍照片 → 強制上傳 Drive，取得公開 URL 後存檔
     if(photoImg&&photoImg.dataset.newPhoto==='1'&&photoImg.src.startsWith('data:')){
-      showSync('⟳ 上傳照片…','#C9A8E0');
+      showSync('⟳ 上傳照片中，請勿關閉…','#C9A8E0');
       const fname=`photo_${b.id||i}_${date}.jpg`;
-      photoData=await uploadPhotoToGAS(photoImg.src, fname);
-      photoImg.dataset.newPhoto=''; // 清除新拍標記，避免重複上傳
+      const uploadResult=await uploadPhotoToGAS(photoImg.src, fname);
+      if(uploadResult && uploadResult.startsWith('http')){
+        photoData=uploadResult; // Drive URL 成功
+        photoImg.src=driveImgSrc(photoData); // 更新顯示
+        showSync('✓ 照片已上傳至 Google Drive','#1E8449');
+      } else {
+        // 上傳失敗：保留 base64 本機備份，並提示
+        photoData=photoImg.src;
+        showSync('⚠️ 照片上傳失敗，已暫存本機','#E07B39');
+      }
+      photoImg.dataset.newPhoto='';
     }
 
     bookings[idx]={...bookings[idx],
@@ -1252,15 +1261,16 @@ async function saveDispatch(){
       rkm:document.getElementById('dp-rkm-'+i)?.value||'',
       rfee:document.getElementById('dp-rfee-'+i)?.value||'',
       photoData,
+      photoUrl: photoData.startsWith('http') ? photoData : (bookings[idx].photoUrl||''),
       photoTime
     };
   }
 
   await save();
   renderBkList();
-  alertEl.textContent='✓ 派車單已確認並儲存';
+  alertEl.textContent='✓ 派車單已確認完成，預約狀態已更新為已派車';
   alertEl.className='alert alert-s show';
-  setTimeout(()=>alertEl.classList.remove('show'),3500);
+  setTimeout(()=>alertEl.classList.remove('show'),4000);
 }
 
 function toggleDpUser(i){
