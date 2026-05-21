@@ -483,6 +483,19 @@ tr:hover td{background:#F8FBFD}
         <span style="font-size:20px;font-weight:700;color:var(--t)" id="dp-total">NT$ 0</span>
       </div>
     </div>
+    <!-- ── 駕駛員手寫簽名板 ── -->
+    <div style="margin-top:14px;padding:14px 16px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;letter-spacing:.04em">✍️ 駕駛員簽名</div>
+      <div style="position:relative;background:#fff;border:2px solid var(--border);border-radius:8px;overflow:hidden">
+        <canvas id="sign-canvas" style="display:block;width:100%;touch-action:none;cursor:crosshair" height="120"></canvas>
+        <div id="sign-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#ccc;font-size:13px">請在此手寫簽名</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button onclick="clearDriverSign()" style="flex:1;padding:7px;background:#f5f5f5;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;color:#666">清除重簽</button>
+        <button onclick="saveDriverSign()" style="flex:2;padding:7px;background:var(--teal);border:none;border-radius:6px;font-size:12px;cursor:pointer;color:#fff;font-weight:600">✓ 儲存簽名</button>
+      </div>
+      <div id="sign-saved-preview" style="display:none;margin-top:8px;font-size:12px;color:var(--teal);font-weight:600">✓ 簽名已儲存</div>
+    </div>
     <div class="btn-row">
       <button class="btn btn-amber" onclick="exportDispatchExcel()">匯出派車單 Excel</button>
       <button class="btn btn-teal" onclick="genDailyReport()">📋 生成日別報表</button>
@@ -712,13 +725,15 @@ async function loadBookings(){
   cached.forEach(b=>{ cachedMap[String(b.id)]=b; });
 
   function mergeBooking(b){
-    // 優先順序：雲端 Drive URL > 本機 localStorage > 雲端 base64
+    // 優先順序：雲端 photoUrl(Drive URL) > 雲端 photoData(Drive URL) > 本機快取 > 雲端 base64
     const local=cachedMap[String(b.id)]||{};
-    const cloudPhoto = (b.photoData && b.photoData.startsWith('http')) ? b.photoData : '';
-    const localPhoto = (local.photoData && local.photoData.startsWith('http')) ? local.photoData
-                     : (local.photoData || '');
+    const cloudUrl = (b.photoUrl && b.photoUrl.startsWith('http')) ? b.photoUrl
+                   : (b.photoData && b.photoData.startsWith('http')) ? b.photoData : '';
+    const localUrl = (local.photoUrl && local.photoUrl.startsWith('http')) ? local.photoUrl
+                   : (local.photoData && local.photoData.startsWith('http')) ? local.photoData : '';
+    const localBase64 = (local.photoData && local.photoData.startsWith('data:')) ? local.photoData : '';
     const cloudBase64 = (b.photoData && b.photoData.startsWith('data:')) ? b.photoData : '';
-    const bestPhoto = cloudPhoto || localPhoto || cloudBase64;
+    const bestPhoto = cloudUrl || localUrl || localBase64 || cloudBase64;
     return {
       ...b,
       id:String(b.id),
@@ -726,6 +741,7 @@ async function loadBookings(){
       wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : ''),
       phone: b.phone || b.Phone || b.tel || b.Tel || (USERS[b.user]&&USERS[b.user].phone) || '',
       photoData: bestPhoto,
+      photoUrl: cloudUrl || localUrl || '',
       photoTime: b.photoTime || local.photoTime || ''
     };
   }
@@ -930,6 +946,70 @@ async function quickDispatch(id){
 
 // 過期未派提醒已停用
 function checkOverdueBookings(){}
+
+// ── 駕駛員手寫簽名板 ──────────────────────────────────────
+let signCanvas=null, signCtx=null, signDrawing=false, signHasMark=false;
+let driverSignDataUrl=(()=>{ try{ return localStorage.getItem('pg_driver_sign')||''; }catch(e){ return ''; } })(); // 從 localStorage 讀回
+
+function initSignCanvas(){
+  signCanvas=document.getElementById('sign-canvas');
+  if(!signCanvas)return;
+  const rect=signCanvas.getBoundingClientRect();
+  const w=Math.round(rect.width||320);
+  signCanvas.width=w*2;
+  signCanvas.height=240;
+  signCtx=signCanvas.getContext('2d');
+  signCtx.scale(2,1);
+  signCtx.strokeStyle='#1a1a2e';
+  signCtx.lineWidth=2.5;
+  signCtx.lineCap='round';
+  signCtx.lineJoin='round';
+
+  const getPos=(e)=>{
+    const r=signCanvas.getBoundingClientRect();
+    const scaleX=signCanvas.width/(2*r.width);
+    const scaleY=signCanvas.height/r.height;
+    if(e.touches){ return {x:(e.touches[0].clientX-r.left)*scaleX, y:(e.touches[0].clientY-r.top)*scaleY}; }
+    return {x:(e.clientX-r.left)*scaleX, y:(e.clientY-r.top)*scaleY};
+  };
+  const start=(e)=>{ e.preventDefault(); signDrawing=true; const p=getPos(e); signCtx.beginPath(); signCtx.moveTo(p.x,p.y); };
+  const move=(e)=>{ if(!signDrawing)return; e.preventDefault(); const p=getPos(e); signCtx.lineTo(p.x,p.y); signCtx.stroke(); signHasMark=true; document.getElementById('sign-hint').style.display='none'; };
+  const end=()=>{ signDrawing=false; };
+
+  signCanvas.addEventListener('mousedown',start);
+  signCanvas.addEventListener('mousemove',move);
+  signCanvas.addEventListener('mouseup',end);
+  signCanvas.addEventListener('mouseleave',end);
+  signCanvas.addEventListener('touchstart',start,{passive:false});
+  signCanvas.addEventListener('touchmove',move,{passive:false});
+  signCanvas.addEventListener('touchend',end);
+
+  if(driverSignDataUrl){
+    const img=new Image();
+    img.onload=()=>{ signCtx.save(); signCtx.scale(0.5,1); signCtx.drawImage(img,0,0); signCtx.restore(); };
+    img.src=driverSignDataUrl;
+    document.getElementById('sign-hint').style.display='none';
+    document.getElementById('sign-saved-preview').style.display='block';
+  }
+}
+
+function clearDriverSign(){
+  if(!signCtx)return;
+  signCtx.clearRect(0,0,signCanvas.width/2,signCanvas.height);
+  signHasMark=false;
+  driverSignDataUrl='';
+  try{ localStorage.removeItem('pg_driver_sign'); }catch(e){}
+  document.getElementById('sign-hint').style.display='flex';
+  document.getElementById('sign-saved-preview').style.display='none';
+}
+
+function saveDriverSign(){
+  if(!signHasMark&&!driverSignDataUrl){ showSync('請先簽名再儲存','#E07B39'); return; }
+  driverSignDataUrl=signCanvas.toDataURL('image/png');
+  try{ localStorage.setItem('pg_driver_sign', driverSignDataUrl); }catch(e){}
+  document.getElementById('sign-saved-preview').style.display='block';
+  showSync('✓ 簽名已儲存（永久保存）','#1E8449');
+}
 function renderBkList(){
   const list=document.getElementById('bk-list');
   const sec=document.getElementById('bk-list-sec');
@@ -1091,6 +1171,7 @@ function loadDispatch(){
       }
     });
     calcTotal(date);
+    setTimeout(initSignCanvas, 50); // 初始化簽名板
   },80);
 }
 function calcTotal(date){
@@ -2222,8 +2303,10 @@ function genDailyReport(){
       ${photosHTML}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid #dde6f0;border-radius:0 0 8px 8px;margin-top:16px;overflow:hidden">
         <div style="padding:14px 16px;border-right:1px solid #dde6f0">
-          <div style="font-size:11px;color:#999;margin-bottom:22px">駕駛員簽名</div>
-          <div style="border-bottom:1px solid #ccc;margin-bottom:4px"></div>
+          <div style="font-size:11px;color:#999;margin-bottom:4px">駕駛員簽名</div>
+          ${driverSignDataUrl
+            ? `<img src="${driverSignDataUrl}" style="width:100%;height:50px;object-fit:contain;display:block;margin-bottom:4px">`
+            : `<div style="height:50px;border-bottom:1px solid #ccc;margin-bottom:4px"></div>`}
           <div style="font-size:10px;color:#aaa">林智仁</div>
         </div>
         <div style="padding:14px 16px;border-right:1px solid #dde6f0">
