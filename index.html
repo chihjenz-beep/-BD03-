@@ -492,9 +492,8 @@ tr:hover td{background:#F8FBFD}
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="clearDriverSign()" style="flex:1;padding:7px;background:#f5f5f5;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;color:#666">清除重簽</button>
-        <button onclick="saveDriverSign()" style="flex:2;padding:7px;background:var(--teal);border:none;border-radius:6px;font-size:12px;cursor:pointer;color:#fff;font-weight:600">✓ 儲存簽名</button>
       </div>
-      <div id="sign-saved-preview" style="display:none;margin-top:8px;font-size:12px;color:var(--teal);font-weight:600">✓ 簽名已儲存</div>
+      <div style="margin-top:6px;font-size:11px;color:#aaa">簽名後按「確認完成」即自動儲存</div>
     </div>
     <div class="btn-row">
       <button class="btn btn-amber" onclick="exportDispatchExcel()">匯出派車單 Excel</button>
@@ -1274,6 +1273,11 @@ async function uploadPhotoToGAS(base64DataUrl, filename){
 }
 
 async function saveDispatch(){
+  // 自動儲存簽名（有筆跡或舊簽名皆保留）
+  if(signCanvas && signHasMark){
+    driverSignDataUrl=signCanvas.toDataURL('image/png');
+    try{ localStorage.setItem('pg_driver_sign', driverSignDataUrl); }catch(e){}
+  }
   syncDispatchVitals();
   const date=document.getElementById('dp-date').value;
   const items=bookings.filter(b=>b.date===date);
