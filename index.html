@@ -1263,29 +1263,44 @@ function driveImgSrc(photoData){
 }
 
 // ── 上傳單張照片到 GAS Drive，回傳公開 URL ──
-async function uploadPhotoToGAS(base64DataUrl, filename){
-  if(!GAS_URL) return base64DataUrl; // 離線模式直接存 base64
+async function uploadPhotoToGAS(base64DataUrl, filename, mimeType='image/jpeg'){
+  if(!GAS_URL) return base64DataUrl;
   try{
     const base64=base64DataUrl.split(',')[1];
     const r=await fetch(GAS_URL,{
       method:'POST',
-      body:JSON.stringify({action:'savePhoto', data:{base64, filename, mimeType:'image/jpeg'}})
+      body:JSON.stringify({action:'savePhoto', data:{base64, filename, mimeType}})
     });
     const json=await r.json();
     if(json&&json.ok&&json.url) return json.url;
-  }catch(e){console.warn('照片上傳失敗，改用本機暫存',e);}
-  return base64DataUrl; // 上傳失敗時退回 base64
+  }catch(e){console.warn('上傳失敗，改用本機暫存',e);}
+  return base64DataUrl;
+}
+
+// ── 簽名上傳至 Drive，回傳公開 URL ──
+async function uploadSignToGAS(date){
+  if(!driverSignDataUrl||!driverSignDataUrl.startsWith('data:')) return driverSignDataUrl||'';
+  showSync('⟳ 上傳簽名中…','#C9A8E0');
+  const fname=`sign_${date||'driver'}.png`;
+  const url=await uploadPhotoToGAS(driverSignDataUrl, fname, 'image/png');
+  if(url&&url.startsWith('http')){
+    // 存到 localStorage 對應日期（同時保留 Drive URL）
+    try{ localStorage.setItem('pg_sign_'+date, url); }catch(e){}
+    driverSignDataUrl=url;
+    showSync('✓ 簽名已上傳','#1E8449');
+  }
+  return url;
 }
 
 async function saveDispatch(){
-  // 自動儲存簽名（依日期存檔）
-  const _signDate=document.getElementById('dp-date').value;
-  if(signCanvas && signHasMark && _signDate){
-    driverSignDataUrl=signCanvas.toDataURL('image/png');
-    try{ localStorage.setItem('pg_sign_'+_signDate, driverSignDataUrl); }catch(e){}
-  }
   syncDispatchVitals();
   const date=document.getElementById('dp-date').value;
+  // 自動儲存簽名並上傳 Drive（依日期存檔）
+  if(signCanvas && signHasMark && date){
+    driverSignDataUrl=signCanvas.toDataURL('image/png');
+    try{ localStorage.setItem('pg_sign_'+date, driverSignDataUrl); }catch(e){}
+    await uploadSignToGAS(date); // 上傳到 Drive，讓 PC 也能看到
+  }
   const items=bookings.filter(b=>b.date===date);
 
   // 顯示儲存中狀態
@@ -1319,6 +1334,7 @@ async function saveDispatch(){
       photoImg.dataset.newPhoto='';
     }
 
+    const signUrl = driverSignDataUrl.startsWith('http') ? driverSignDataUrl : (bookings[idx].signUrl||'');
     bookings[idx]={...bookings[idx],
       dispatched:true,
       phone: bookings[idx].phone || (USERS[bookings[idx].user]&&USERS[bookings[idx].user].phone) || '',
@@ -1332,7 +1348,8 @@ async function saveDispatch(){
       rfee:document.getElementById('dp-rfee-'+i)?.value||'',
       photoData,
       photoUrl: photoData.startsWith('http') ? photoData : (bookings[idx].photoUrl||''),
-      photoTime
+      photoTime,
+      signUrl
     };
   }
 
@@ -1853,7 +1870,9 @@ function genMonthlyReport(){
         </div>
         <!-- 駕駛員簽名欄（依日期讀取） -->
         ${(()=>{
-          const _signImg=(()=>{ try{ return localStorage.getItem('pg_sign_'+dt)||''; }catch(e){ return ''; } })();
+          // 優先從 bookings 讀 Drive URL，其次從 localStorage 讀（含手機本機）
+          const _daySignUrl=(dayItems[0]&&dayItems[0].signUrl)||'';
+          const _signImg=_daySignUrl||(()=>{ try{ return localStorage.getItem('pg_sign_'+dt)||''; }catch(e){ return ''; } })();
           return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid #dde6f0;border-radius:6px;margin-top:12px;overflow:hidden">
             <div style="padding:12px 14px;border-right:1px solid #dde6f0">
               <div style="font-size:10px;color:#999;margin-bottom:4px">駕駛員簽名</div>
