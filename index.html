@@ -733,6 +733,9 @@ async function loadBookings(){
     const localBase64 = (local.photoData && local.photoData.startsWith('data:')) ? local.photoData : '';
     const cloudBase64 = (b.photoData && b.photoData.startsWith('data:')) ? b.photoData : '';
     const bestPhoto = cloudUrl || localUrl || localBase64 || cloudBase64;
+    // 簽名 URL：雲端優先，其次本機
+    const bestSignUrl = (b.signUrl&&b.signUrl.startsWith('http')) ? b.signUrl
+                      : (local.signUrl&&local.signUrl.startsWith('http')) ? local.signUrl : '';
     return {
       ...b,
       id:String(b.id),
@@ -741,7 +744,8 @@ async function loadBookings(){
       phone: b.phone || b.Phone || b.tel || b.Tel || (USERS[b.user]&&USERS[b.user].phone) || '',
       photoData: bestPhoto,
       photoUrl: cloudUrl || localUrl || '',
-      photoTime: b.photoTime || local.photoTime || ''
+      photoTime: b.photoTime || local.photoTime || '',
+      signUrl: bestSignUrl
     };
   }
 
@@ -752,6 +756,22 @@ async function loadBookings(){
         bookings=r.data.map(mergeBooking);
         // 存回 localStorage（含照片資料）
         localStorage.setItem('pg_bookings',JSON.stringify(bookings));
+        // 把雲端的簽名 URL 寫回 localStorage，讓手機也能讀到
+        const signByDate={};
+        bookings.forEach(b=>{
+          if(b.signUrl&&b.signUrl.startsWith('http')&&b.date){
+            signByDate[b.date]=b.signUrl;
+          }
+        });
+        Object.entries(signByDate).forEach(([dt,url])=>{
+          try{
+            const existing=localStorage.getItem('pg_sign_'+dt);
+            // 只有在本機沒有或本機是 base64 時才用雲端 URL 覆蓋
+            if(!existing||existing.startsWith('data:')){
+              localStorage.setItem('pg_sign_'+dt, url);
+            }
+          }catch(e){}
+        });
         showSync('✓ 預約紀錄已同步');
       } else {
         if(cached.length){
