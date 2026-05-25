@@ -948,7 +948,7 @@ function checkOverdueBookings(){}
 
 // ── 駕駛員手寫簽名板 ──────────────────────────────────────
 let signCanvas=null, signCtx=null, signDrawing=false, signHasMark=false;
-let driverSignDataUrl=(()=>{ try{ return localStorage.getItem('pg_driver_sign')||''; }catch(e){ return ''; } })(); // 從 localStorage 讀回
+let driverSignDataUrl=''; // 依日期獨立存檔，由 loadDispatch 載入
 
 function initSignCanvas(){
   signCanvas=document.getElementById('sign-canvas');
@@ -983,12 +983,16 @@ function initSignCanvas(){
   signCanvas.addEventListener('touchmove',move,{passive:false});
   signCanvas.addEventListener('touchend',end);
 
-  if(driverSignDataUrl){
+  // 依日期讀取對應簽名
+  const _date=document.getElementById('dp-date').value;
+  const _key='pg_sign_'+(_date||'default');
+  const _saved=(()=>{ try{ return localStorage.getItem(_key)||''; }catch(e){ return ''; } })();
+  if(_saved){
+    driverSignDataUrl=_saved;
     const img=new Image();
     img.onload=()=>{ signCtx.save(); signCtx.scale(0.5,1); signCtx.drawImage(img,0,0); signCtx.restore(); };
-    img.src=driverSignDataUrl;
+    img.src=_saved;
     document.getElementById('sign-hint').style.display='none';
-    document.getElementById('sign-saved-preview').style.display='block';
   }
 }
 
@@ -997,17 +1001,18 @@ function clearDriverSign(){
   signCtx.clearRect(0,0,signCanvas.width/2,signCanvas.height);
   signHasMark=false;
   driverSignDataUrl='';
-  try{ localStorage.removeItem('pg_driver_sign'); }catch(e){}
+  const date=document.getElementById('dp-date').value;
+  const key='pg_sign_'+(date||'default');
+  try{ localStorage.removeItem(key); }catch(e){}
   document.getElementById('sign-hint').style.display='flex';
-  document.getElementById('sign-saved-preview').style.display='none';
 }
 
-function saveDriverSign(){
+function saveDriverSign(date){
   if(!signHasMark&&!driverSignDataUrl){ showSync('請先簽名再儲存','#E07B39'); return; }
   driverSignDataUrl=signCanvas.toDataURL('image/png');
-  try{ localStorage.setItem('pg_driver_sign', driverSignDataUrl); }catch(e){}
-  document.getElementById('sign-saved-preview').style.display='block';
-  showSync('✓ 簽名已儲存（永久保存）','#1E8449');
+  const key='pg_sign_'+(date||document.getElementById('dp-date').value||'default');
+  try{ localStorage.setItem(key, driverSignDataUrl); }catch(e){}
+  showSync('✓ 簽名已儲存','#1E8449');
 }
 function renderBkList(){
   const list=document.getElementById('bk-list');
@@ -1273,10 +1278,11 @@ async function uploadPhotoToGAS(base64DataUrl, filename){
 }
 
 async function saveDispatch(){
-  // 自動儲存簽名（有筆跡或舊簽名皆保留）
-  if(signCanvas && signHasMark){
+  // 自動儲存簽名（依日期存檔）
+  const _signDate=document.getElementById('dp-date').value;
+  if(signCanvas && signHasMark && _signDate){
     driverSignDataUrl=signCanvas.toDataURL('image/png');
-    try{ localStorage.setItem('pg_driver_sign', driverSignDataUrl); }catch(e){}
+    try{ localStorage.setItem('pg_sign_'+_signDate, driverSignDataUrl); }catch(e){}
   }
   syncDispatchVitals();
   const date=document.getElementById('dp-date').value;
@@ -1845,6 +1851,27 @@ function genMonthlyReport(){
             </tfoot>
           </table>
         </div>
+        <!-- 駕駛員簽名欄（依日期讀取） -->
+        ${(()=>{
+          const _signImg=(()=>{ try{ return localStorage.getItem('pg_sign_'+dt)||''; }catch(e){ return ''; } })();
+          return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid #dde6f0;border-radius:6px;margin-top:12px;overflow:hidden">
+            <div style="padding:12px 14px;border-right:1px solid #dde6f0">
+              <div style="font-size:10px;color:#999;margin-bottom:4px">駕駛員簽名</div>
+              ${_signImg?`<img src="${_signImg}" style="width:100%;height:44px;object-fit:contain;display:block;margin-bottom:3px">`:`<div style="height:44px;border-bottom:1px solid #ccc;margin-bottom:3px"></div>`}
+              <div style="font-size:10px;color:#aaa">林智仁</div>
+            </div>
+            <div style="padding:12px 14px;border-right:1px solid #dde6f0">
+              <div style="font-size:10px;color:#999;margin-bottom:22px">督導確認</div>
+              <div style="border-bottom:1px solid #ccc;margin-bottom:3px"></div>
+              <div style="font-size:10px;color:#aaa">&nbsp;</div>
+            </div>
+            <div style="padding:12px 14px">
+              <div style="font-size:10px;color:#999;margin-bottom:22px">主管核准</div>
+              <div style="border-bottom:1px solid #ccc;margin-bottom:3px"></div>
+              <div style="font-size:10px;color:#aaa">&nbsp;</div>
+            </div>
+          </div>`;
+        })()}
       </div>
     </div>`;
   });
@@ -2184,10 +2211,11 @@ function checkTimeConflicts(items){
 }
 
 function genDailyReport(){
-  // 若簽名板有筆跡但尚未按儲存，自動儲存
-  if(signHasMark && signCanvas && !driverSignDataUrl){
+  // 若簽名板有筆跡但尚未儲存，自動儲存（依日期）
+  const _rptDate=document.getElementById('dp-date').value;
+  if(signHasMark && signCanvas && _rptDate){
     driverSignDataUrl=signCanvas.toDataURL('image/png');
-    try{ localStorage.setItem('pg_driver_sign', driverSignDataUrl); }catch(e){}
+    try{ localStorage.setItem('pg_sign_'+_rptDate, driverSignDataUrl); }catch(e){}
   }
   const date=document.getElementById('dp-date').value;
   if(!date){alert('請先選擇日期');return;}
@@ -2313,7 +2341,7 @@ function genDailyReport(){
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid #dde6f0;border-radius:0 0 8px 8px;margin-top:16px;overflow:hidden">
         <div style="padding:14px 16px;border-right:1px solid #dde6f0">
           <div style="font-size:11px;color:#999;margin-bottom:4px">駕駛員簽名</div>
-          ${(()=>{ const s=driverSignDataUrl||(localStorage.getItem('pg_driver_sign')||''); return s ? `<img src="${s}" style="width:100%;height:50px;object-fit:contain;display:block;margin-bottom:4px">` : `<div style="height:50px;border-bottom:1px solid #ccc;margin-bottom:4px"></div>`; })()}
+          ${(()=>{ const _d=document.getElementById('dp-date')?.value||''; const s=driverSignDataUrl||(localStorage.getItem('pg_sign_'+_d)||''); return s ? `<img src="${s}" style="width:100%;height:50px;object-fit:contain;display:block;margin-bottom:4px">` : `<div style="height:50px;border-bottom:1px solid #ccc;margin-bottom:4px"></div>`; })()}
           <div style="font-size:10px;color:#aaa">林智仁</div>
         </div>
         <div style="padding:14px 16px;border-right:1px solid #dde6f0">
