@@ -1299,17 +1299,19 @@ async function uploadPhotoToGAS(base64DataUrl, filename, mimeType='image/jpeg'){
 
 // ── 簽名上傳至 Drive，回傳公開 URL ──
 async function uploadSignToGAS(date){
-  if(!driverSignDataUrl||!driverSignDataUrl.startsWith('data:')) return driverSignDataUrl||'';
+  if(!driverSignDataUrl) return '';
+  if(driverSignDataUrl.startsWith('http')) return driverSignDataUrl; // 已是 Drive URL
   showSync('⟳ 上傳簽名中…','#C9A8E0');
   const fname=`sign_${date||'driver'}.png`;
   const url=await uploadPhotoToGAS(driverSignDataUrl, fname, 'image/png');
   if(url&&url.startsWith('http')){
-    // 存到 localStorage 對應日期（同時保留 Drive URL）
     try{ localStorage.setItem('pg_sign_'+date, url); }catch(e){}
     driverSignDataUrl=url;
-    showSync('✓ 簽名已上傳','#1E8449');
+    showSync('✓ 簽名已上傳至 Google Drive','#1E8449');
+    return url;
   }
-  return url;
+  showSync('⚠️ 簽名上傳失敗，請確認網路後重試','#E07B39');
+  return '';
 }
 
 async function saveDispatch(){
@@ -1337,21 +1339,23 @@ async function saveDispatch(){
     const photoTime=document.getElementById('photo-time-'+i)?.textContent||bookings[idx].photoTime||'';
     let photoData=bookings[idx].photoData||'';
 
-    // 有新拍照片 → 強制上傳 Drive，取得公開 URL 後存檔
-    if(photoImg&&photoImg.dataset.newPhoto==='1'&&photoImg.src.startsWith('data:')){
+    // 有照片（新拍或既有 base64）→ 若還不是 Drive URL 就上傳
+    const hasNewPhoto = photoImg&&photoImg.dataset.newPhoto==='1'&&photoImg.src.startsWith('data:');
+    const hasBase64 = photoData.startsWith('data:'); // 既有 base64 也需要上傳
+    if(hasNewPhoto || (hasBase64 && !photoData.startsWith('http'))){
+      const srcToUpload = hasNewPhoto ? photoImg.src : photoData;
       showSync('⟳ 上傳照片中，請勿關閉…','#C9A8E0');
       const fname=`photo_${b.id||i}_${date}.jpg`;
-      const uploadResult=await uploadPhotoToGAS(photoImg.src, fname);
+      const uploadResult=await uploadPhotoToGAS(srcToUpload, fname);
       if(uploadResult && uploadResult.startsWith('http')){
-        photoData=uploadResult; // Drive URL 成功
-        photoImg.src=driveImgSrc(photoData); // 更新顯示
+        photoData=uploadResult;
+        if(photoImg) photoImg.src=driveImgSrc(photoData);
         showSync('✓ 照片已上傳至 Google Drive','#1E8449');
       } else {
-        // 上傳失敗：保留 base64 本機備份，並提示
-        photoData=photoImg.src;
-        showSync('⚠️ 照片上傳失敗，已暫存本機','#E07B39');
+        photoData=srcToUpload;
+        showSync('⚠️ 照片上傳失敗，請確認網路後重試','#E07B39');
       }
-      photoImg.dataset.newPhoto='';
+      if(photoImg) photoImg.dataset.newPhoto='';
     }
 
     const signUrl = driverSignDataUrl.startsWith('http') ? driverSignDataUrl : (bookings[idx].signUrl||'');
