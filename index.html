@@ -1350,23 +1350,26 @@ async function saveDispatch(){
     const photoTime=document.getElementById('photo-time-'+i)?.textContent||bookings[idx].photoTime||'';
     let photoData=bookings[idx].photoData||'';
 
-    // 有照片（新拍或既有 base64）→ 若還不是 Drive URL 就上傳
-    const hasNewPhoto = photoImg&&photoImg.dataset.newPhoto==='1'&&photoImg.src.startsWith('data:');
-    const hasBase64 = photoData.startsWith('data:'); // 既有 base64 也需要上傳
-    if(hasNewPhoto || (hasBase64 && !photoData.startsWith('http'))){
-      const srcToUpload = hasNewPhoto ? photoImg.src : photoData;
-      showSync('⟳ 上傳照片中，請勿關閉…','#C9A8E0');
+    // 取得照片來源：優先用 img.src（已渲染），其次用 bookings 快取
+    // 注意：乘客區塊未展開時 photoImg 存在但 src 可能為空，直接用 photoData
+    const imgSrc = photoImg&&photoImg.src&&!photoImg.src.endsWith(location.href)&&photoImg.src.length>100 ? photoImg.src : '';
+    const effectivePhoto = imgSrc || photoData;
+
+    if(effectivePhoto && !effectivePhoto.startsWith('http')){
+      // 還不是 Drive URL → 上傳
+      showSync(`⟳ 上傳照片（${b.user}）…`,'#C9A8E0');
       const fname=`photo_${b.id||i}_${date}.jpg`;
-      const uploadResult=await uploadPhotoToGAS(srcToUpload, fname);
+      const uploadResult=await uploadPhotoToGAS(effectivePhoto, fname);
       if(uploadResult && uploadResult.startsWith('http')){
         photoData=uploadResult;
-        if(photoImg) photoImg.src=driveImgSrc(photoData);
-        showSync('✓ 照片已上傳至 Google Drive','#1E8449');
+        if(photoImg){ photoImg.src=driveImgSrc(photoData); photoImg.dataset.newPhoto=''; }
+        showSync(`✓ ${b.user} 照片已上傳`,'#1E8449');
       } else {
-        photoData=srcToUpload;
-        showSync('⚠️ 照片上傳失敗，請確認網路後重試','#E07B39');
+        photoData=effectivePhoto;
+        showSync(`⚠️ ${b.user} 照片上傳失敗`,'#E07B39');
       }
-      if(photoImg) photoImg.dataset.newPhoto='';
+    } else if(effectivePhoto && effectivePhoto.startsWith('http')){
+      photoData=effectivePhoto;
     }
 
     const signUrl = driverSignDataUrl.startsWith('http') ? driverSignDataUrl : (bookings[idx].signUrl||'');
