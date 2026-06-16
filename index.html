@@ -1328,16 +1328,18 @@ async function uploadSignToGAS(date){
 async function saveDispatch(){
   syncDispatchVitals();
   const date=document.getElementById('dp-date').value;
-  // 自動儲存簽名並上傳 Drive（依日期存檔），必須 await 完成才能取得 Drive URL
+
+  // 強制從 localStorage 讀取當日簽名（防止 initSignCanvas 尚未執行）
+  if(date && !driverSignDataUrl){
+    try{ driverSignDataUrl=localStorage.getItem('pg_sign_'+date)||''; }catch(e){}
+  }
+  // 若簽名板有新筆跡，優先用新簽名
   if(signCanvas && signHasMark && date){
     driverSignDataUrl=signCanvas.toDataURL('image/png');
     try{ localStorage.setItem('pg_sign_'+date, driverSignDataUrl); }catch(e){}
-    const signUploadUrl = await uploadSignToGAS(date);
-    if(signUploadUrl && signUploadUrl.startsWith('http')){
-      driverSignDataUrl = signUploadUrl; // 確保後續 signUrl 用 Drive URL
-    }
-  } else if(date && driverSignDataUrl && !driverSignDataUrl.startsWith('http')){
-    // 有舊簽名但還不是 Drive URL，也補上傳
+  }
+  // 有簽名且還不是 Drive URL → 上傳
+  if(date && driverSignDataUrl && !driverSignDataUrl.startsWith('http')){
     const signUploadUrl = await uploadSignToGAS(date);
     if(signUploadUrl && signUploadUrl.startsWith('http')){
       driverSignDataUrl = signUploadUrl;
