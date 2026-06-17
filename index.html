@@ -1781,20 +1781,29 @@ function exportDispatchExcel(){
 
 
 /* ===== 月別派車彙整報表 ===== */
-function genMonthlyReport(){
+async function genMonthlyReport(){
   const y=document.getElementById('mr-y').value;
   const m=document.getElementById('mr-m').value;
   const y_ad=parseInt(y)+1911;
+
+  // 先重新從雲端載入最新資料（含最新照片/簽名 Drive URL）
+  showSync('⟳ 載入最新資料中…','#C9A8E0');
+  await loadBookings();
+  showSync('✓ 已載入最新資料','#1E8449');
+
   const items=filterByMonth(y,m);
   if(!items.length){alert(`民國 ${y} 年 ${m} 月無派車紀錄`);return;}
 
-  // 確保 bookings 是最新的（從 localStorage 補回可能遺漏的 photoData）
+  // 確保 photoData 補齊（雙重保險，從最新 localStorage 快取補回）
   const rawStored=JSON.parse(localStorage.getItem('pg_bookings')||'[]');
   items.forEach(b=>{
-    if(!b.photoData){
-      const stored=rawStored.find(s=>String(s.id)===String(b.id));
-      if(stored&&stored.photoData) b.photoData=stored.photoData;
-      if(stored&&stored.photoTime&&!b.photoTime) b.photoTime=stored.photoTime;
+    const stored=rawStored.find(s=>String(s.id)===String(b.id));
+    if(stored){
+      // 優先用 Drive URL（http），其次保留現有值
+      if(stored.photoData&&stored.photoData.startsWith('http')) b.photoData=stored.photoData;
+      else if(!b.photoData&&stored.photoData) b.photoData=stored.photoData;
+      if(stored.photoTime&&!b.photoTime) b.photoTime=stored.photoTime;
+      if(stored.signUrl&&stored.signUrl.startsWith('http')) b.signUrl=stored.signUrl;
     }
   });
 
@@ -2279,6 +2288,7 @@ function checkTimeConflicts(items){
 }
 
 function genDailyReport(){
+ try{
   // 若簽名板有筆跡但尚未儲存，自動儲存（依日期）
   const _rptDate=document.getElementById('dp-date').value;
   if(signHasMark && signCanvas && _rptDate){
@@ -2426,6 +2436,10 @@ function genDailyReport(){
 
   document.getElementById('daily-report-modal').style.display='block';
   document.body.style.overflow='hidden';
+ }catch(err){
+  console.error('genDailyReport 錯誤:',err);
+  alert('生成報表失敗：'+err.message+'\n\n請截圖此訊息回報');
+ }
 }
 
 function closeDailyReport(){
