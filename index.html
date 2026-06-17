@@ -574,10 +574,14 @@ tr:hover td{background:#F8FBFD}
 <div id="panel-record" class="panel">
   <div class="card">
     <div class="card-title">月份篩選</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="nav-btn active" id="rec-tab-date" onclick="switchRecordTab('date')" style="border-radius:8px;padding:8px 16px">📅 依日期（現行）</button>
+      <button class="nav-btn" id="rec-tab-user" onclick="switchRecordTab('user')" style="border-radius:8px;padding:8px 16px">👤 依人別・按月</button>
+    </div>
     <div class="grid3">
       <div class="field"><label>民國年份</label><input type="number" id="rec-y" value="115" min="115" max="130"></div>
       <div class="field"><label>月份</label><select id="rec-m"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5" selected>5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></div>
-      <div class="field" style="justify-content:flex-end"><label>&nbsp;</label><div style="display:flex;gap:8px"><button class="btn btn-p" onclick="genRecord()">產生紀錄表</button><button class="btn btn-amber" onclick="exportRecordExcel()">匯出 Excel</button></div></div>
+      <div class="field" style="justify-content:flex-end"><label>&nbsp;</label><div style="display:flex;gap:8px" id="rec-btn-group"><button class="btn btn-p" onclick="genRecord()">產生紀錄表</button><button class="btn btn-amber" onclick="exportRecordExcel()">匯出 Excel</button></div></div>
     </div>
   </div>
   <div id="rec-out"></div>
@@ -1462,6 +1466,113 @@ function fmtTime(t){
   const ampm=h<12?'上午':'下午';
   const h12=h%12||12;
   return`${ampm} ${String(h12).padStart(2,'0')}:${mm}`;
+}
+
+let recordTabMode='date'; // 'date' 依日期 / 'user' 依人別
+
+function switchRecordTab(mode){
+  recordTabMode=mode;
+  document.getElementById('rec-tab-date').classList.toggle('active', mode==='date');
+  document.getElementById('rec-tab-user').classList.toggle('active', mode==='user');
+  const btnGroup=document.getElementById('rec-btn-group');
+  if(mode==='date'){
+    btnGroup.innerHTML=`<button class="btn btn-p" onclick="genRecord()">產生紀錄表</button><button class="btn btn-amber" onclick="exportRecordExcel()">匯出 Excel</button>`;
+    genRecord();
+  }else{
+    btnGroup.innerHTML=`<button class="btn btn-p" onclick="genRecordByUser()">產生紀錄表</button><button class="btn btn-amber" onclick="exportRecordByUserExcel()">匯出 Excel</button>`;
+    genRecordByUser();
+  }
+}
+
+// ── 以人別、按月份彙整的出勤紀錄表 ──
+function genRecordByUser(){
+  const y=document.getElementById('rec-y').value;
+  const m=document.getElementById('rec-m').value;
+  const items=filterByMonth(y,m);
+  const out=document.getElementById('rec-out');
+  if(!items.length){out.innerHTML='<div class="card" style="color:var(--muted)">本月無預約紀錄，請先在模組一建立預約。</div>';return;}
+
+  // 依使用者分組，組內依日期排序
+  const byUser={};
+  items.forEach(b=>{
+    if(!byUser[b.user]) byUser[b.user]=[];
+    byUser[b.user].push(b);
+  });
+  Object.values(byUser).forEach(arr=>arr.sort((a,b)=>a.date.localeCompare(b.date)));
+
+  const userNames=Object.keys(byUser).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+
+  let blocks='';
+  userNames.forEach(user=>{
+    const list=byUser[user];
+    const phone=list[0].phone||'';
+    const addr=list[0].addr||'';
+    let rows='';
+    list.forEach((b,i)=>{
+      rows+=`<tr>
+        <td>${i+1}</td>
+        <td style="text-align:left;font-size:11px;white-space:nowrap">${rocFmt(b.date)}</td>
+        <td style="text-align:left;font-size:11px">${b.dest||''}</td>
+        <td style="white-space:nowrap;font-size:12px">${b.gdep?fmtTime(b.gdep):'<span style="font-size:10px;color:#C4A8B4">待派車</span>'}</td>
+        <td style="white-space:nowrap;font-size:12px">${b.garr?fmtTime(b.garr):'<span style="font-size:10px;color:#C4A8B4">待派車</span>'}</td>
+        <td style="white-space:nowrap;font-size:12px">${b.rdep?fmtTime(b.rdep):'<span style="font-size:10px;color:#C4A8B4">待派車</span>'}</td>
+        <td style="white-space:nowrap;font-size:12px">${b.rarr?fmtTime(b.rarr):'<span style="font-size:10px;color:#C4A8B4">待派車</span>'}</td>
+        <td><span class="tag ${(b.welfare||'一般戶')==='一般戶'?'tag-general':'tag-low'}">${b.welfare||'一般戶'}</span></td>
+        <td>${b.companion||''}</td>
+        <td style="font-size:11px">${b.note||''}</td>
+      </tr>`;
+    });
+    blocks+=`<div class="card" style="margin-bottom:14px">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>👤 ${user}　<span style="font-size:11px;color:var(--muted);font-weight:400">${phone}　${addr}</span></span>
+        <span style="font-size:12px;color:var(--t);font-weight:600">共 ${list.length} 次</span>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>序</th><th>日期</th><th>目的地</th>
+            <th>去程啟程</th><th>去程抵達</th><th>回程出發</th><th>回程抵達</th><th>身分別</th><th>陪同</th><th>備註</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  });
+
+  out.innerHTML=`<div class="card" style="background:var(--tl);border:1px dashed #F2C4D4;margin-bottom:14px">
+    <div style="font-size:12px;color:var(--t)">BD03 社區式交通接送出勤紀錄表（依人別） — 民國 ${y} 年 ${m} 月，共 ${userNames.length} 位使用者 / ${items.length} 筆紀錄</div>
+  </div>${blocks}`;
+}
+
+function exportRecordByUserExcel(){
+  const y=document.getElementById('rec-y').value;
+  const m=document.getElementById('rec-m').value;
+  const items=filterByMonth(y,m);
+  if(!items.length){alert('本月無資料');return;}
+
+  const byUser={};
+  items.forEach(b=>{
+    if(!byUser[b.user]) byUser[b.user]=[];
+    byUser[b.user].push(b);
+  });
+  Object.values(byUser).forEach(arr=>arr.sort((a,b)=>a.date.localeCompare(b.date)));
+  const userNames=Object.keys(byUser).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+
+  const wb=XLSX.utils.book_new();
+  const aoa=[['嘉義縣平安家園多元關懷協會 BD03 社區式交通接送出勤紀錄表（依人別）  民國 '+y+' 年 '+m+' 月'],[]];
+  userNames.forEach(user=>{
+    const list=byUser[user];
+    aoa.push(['使用者：'+user, '電話：'+(list[0].phone||''), '地址：'+(list[0].addr||'')]);
+    aoa.push(['序','日期','目的地','去程啟程','去程抵達','回程出發','回程抵達','身分別','陪同','備註']);
+    list.forEach((b,i)=>{
+      aoa.push([i+1, rocFmt(b.date,false), b.dest||'', b.gdep||'', b.garr||'', b.rdep||'', b.rarr||'', b.welfare||'一般戶', b.companion||'', b.note||'']);
+    });
+    aoa.push([]);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:5},{wch:14},{wch:18},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:8},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws,'依人別出勤紀錄');
+  XLSX.writeFile(wb,`平安家園_BD03_出勤紀錄_依人別_${y}年${m}月.xlsx`);
 }
 
 function genRecord(){
