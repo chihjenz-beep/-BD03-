@@ -506,9 +506,32 @@ tr:hover td{background:#F8FBFD}
         <div class="field" style="margin:0"><label style="font-size:11px">民國年份</label><input type="number" id="mr-y" value="115" min="110" max="130" style="width:72px"></div>
         <div class="field" style="margin:0"><label style="font-size:11px">月份</label><select id="mr-m" style="width:72px"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5" selected>5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></div>
         <button class="btn btn-p" style="margin-top:16px" onclick="genMonthlyReport()">📊 產生月別報表</button>
+        <button class="btn btn-teal" style="margin-top:16px" onclick="openReceiptPanel()">🧾 開立收據</button>
       </div>
     </div>
     <div class="alert alert-s" id="dp-alert">✓ 派車單已確認完成。</div>
+    <!-- 收據 modal -->
+    <div id="receipt-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;overflow-y:auto;padding:20px 0">
+      <div id="receipt-inner" style="background:#fff;max-width:880px;margin:0 auto;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden">
+        <div style="background:#042C53;padding:16px 24px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="color:#B5D4F4;font-size:12px;letter-spacing:.04em">嘉義縣平安家園多元關懷協會</div>
+            <div style="color:#fff;font-size:16px;font-weight:700;margin-top:2px">BD03 交通接送服務 月結收據</div>
+          </div>
+          <button onclick="closeReceiptPanel()" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+        </div>
+        <div style="padding:16px 24px;background:#F7F9FC;border-bottom:1px solid #e8e8e8;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="field" style="margin:0"><label style="font-size:11px">民國年份</label><input type="number" id="rc-y" value="115" min="110" max="130" style="width:72px"></div>
+          <div class="field" style="margin:0"><label style="font-size:11px">月份</label><select id="rc-m" style="width:72px"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5" selected>5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></div>
+          <button class="btn btn-p" style="margin-top:16px" onclick="genReceipts()">產生本月所有收據</button>
+        </div>
+        <div id="receipt-body" style="padding:16px 24px"></div>
+        <div style="padding:16px 24px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #e8e8e8;background:#fafafa">
+          <button class="btn btn-amber" onclick="exportReceiptsPDF()">⬇ 匯出全部 PDF</button>
+          <button class="btn btn-o" onclick="closeReceiptPanel()">關閉</button>
+        </div>
+      </div>
+    </div>
     <!-- 日別報表 modal -->
     <div id="daily-report-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;overflow-y:auto;padding:20px 0">
       <div id="daily-report-inner" style="background:#fff;max-width:900px;margin:0 auto;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.22);overflow:hidden">
@@ -1781,6 +1804,188 @@ function exportDispatchExcel(){
 
 
 /* ===== 月別派車彙整報表 ===== */
+// ════════════════════════════════════════════════════════════
+// 收據模組
+// ════════════════════════════════════════════════════════════
+let receiptsCache=[]; // 暫存本次產生的收據資料，供匯出PDF使用
+
+function openReceiptPanel(){
+  document.getElementById('receipt-modal').style.display='block';
+  document.body.style.overflow='hidden';
+}
+function closeReceiptPanel(){
+  document.getElementById('receipt-modal').style.display='none';
+  document.body.style.overflow='';
+}
+
+// 取得（或建立）某人某月的收據編號，格式：R{民國年}{月02}-{序號03}
+function getOrCreateReceiptNo(y, m, userName){
+  const key='pg_receipt_no_'+y+'_'+String(m).padStart(2,'0');
+  let map={};
+  try{ map=JSON.parse(localStorage.getItem(key)||'{}'); }catch(e){}
+  if(map[userName]) return map[userName];
+  const usedNos=Object.values(map);
+  let seq=1;
+  while(usedNos.includes('R'+y+String(m).padStart(2,'0')+'-'+String(seq).padStart(3,'0'))) seq++;
+  const no='R'+y+String(m).padStart(2,'0')+'-'+String(seq).padStart(3,'0');
+  map[userName]=no;
+  try{ localStorage.setItem(key, JSON.stringify(map)); }catch(e){}
+  return no;
+}
+
+function numToChinese(num){
+  // 簡易阿拉伯數字轉中文大寫金額（萬以內）
+  const digits=['零','壹','貳','參','肆','伍','陸','柴','捌','玖'];
+  const units=['','拾','佰','仟'];
+  const groups=['',"萬"];
+  num=Math.round(num);
+  if(num===0) return '零元整';
+  let s=String(num);
+  let result='';
+  const len=s.length;
+  for(let i=0;i<len;i++){
+    const d=parseInt(s[i]);
+    const pos=len-i-1;
+    const unit=units[pos%4];
+    const groupUnit=pos>=4?groups[Math.floor(pos/4)]:'';
+    if(d!==0){
+      result+=digits[d]+unit+(pos%4===0?groupUnit:'');
+    }else{
+      if(result&&!result.endsWith('零')) result+='零';
+    }
+  }
+  result=result.replace(/零+$/,'').replace(/零+/g,'零');
+  return result+'元整';
+}
+
+function genReceipts(){
+ try{
+  const y=document.getElementById('rc-y').value;
+  const m=document.getElementById('rc-m').value;
+  const items=filterByMonth(y,m);
+  if(!items.length){ alert(`民國 ${y} 年 ${m} 月無派車紀錄`); return; }
+
+  // 依使用者彙整當月車資
+  const byUser={};
+  items.forEach(b=>{
+    const gf=parseFloat(b.gfee)||0, rf=parseFloat(b.rfee)||0;
+    if(!byUser[b.user]) byUser[b.user]={total:0,count:0,addr:b.addr||''};
+    byUser[b.user].total+=gf+rf;
+    byUser[b.user].count+=1;
+  });
+
+  const today=new Date();
+  const issueDate=`民國 ${y} 年 ${m} 月 ${today.getDate()} 日`;
+
+  receiptsCache=Object.entries(byUser).map(([user,info])=>{
+    const no=getOrCreateReceiptNo(y,m,user);
+    return {no,user,total:Math.round(info.total),count:info.count,addr:info.addr,y,m,issueDate};
+  });
+
+  renderReceipts();
+  syncReceiptsToGAS(receiptsCache); // 同步到雲端試算表
+ }catch(err){
+  console.error('genReceipts 錯誤:',err);
+  alert('產生收據失敗：'+err.message);
+ }
+}
+
+// 將收據資料同步到 GAS（新增/更新「收據」工作表）
+async function syncReceiptsToGAS(receipts){
+  if(!GAS_URL) return;
+  try{
+    showSync('⟳ 同步收據紀錄…','#C9A8E0');
+    await gasPost('saveReceipts', receipts);
+    showSync('✓ 收據已同步','#1E8449');
+  }catch(e){
+    console.warn('收據同步失敗',e);
+    showSync('⚠️ 收據同步失敗（已存本機）','#E07B39');
+  }
+}
+
+function receiptCardHTML(r){
+  return `
+    <div style="border:1.5px solid #042C53;border-radius:8px;padding:16px 20px;margin-bottom:14px;page-break-inside:avoid">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #042C53;padding-bottom:8px;margin-bottom:10px">
+        <div>
+          <div style="font-size:15px;font-weight:800;color:#042C53">嘉義縣平安家園多元關懷協會</div>
+          <div style="font-size:12px;color:#5a6a82;margin-top:2px">BD03 社區式長照交通接送服務 月結收據</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;color:#8099B0">收據編號</div>
+          <div style="font-size:13px;font-weight:700;color:#C06030">${r.no}</div>
+        </div>
+      </div>
+      <table style="width:100%;font-size:12.5px;border-collapse:collapse">
+        <tr>
+          <td style="padding:4px 0;color:#8099B0;width:80px">使用者</td>
+          <td style="padding:4px 0;font-weight:700;color:#042C53">${r.user}</td>
+          <td style="padding:4px 0;color:#8099B0;width:80px">服務期間</td>
+          <td style="padding:4px 0;font-weight:600">民國 ${r.y} 年 ${r.m} 月</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:#8099B0">案家地址</td>
+          <td colspan="3" style="padding:4px 0">${r.addr}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:#8099B0">乘車次數</td>
+          <td style="padding:4px 0">${r.count} 次</td>
+          <td style="padding:4px 0;color:#8099B0">開立日期</td>
+          <td style="padding:4px 0">${r.issueDate}</td>
+        </tr>
+      </table>
+      <div style="background:#F7F9FC;border:1px solid #E0E8F0;border-radius:6px;padding:10px 14px;margin-top:10px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;color:#5a6a82">中文大寫：${numToChinese(r.total)}</div>
+        <div style="font-size:18px;font-weight:800;color:#042C53">NT$ ${r.total.toLocaleString()}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:14px;border-top:1px dashed #ccc;padding-top:12px">
+        <div style="padding:0 14px;border-right:1px solid #dde6f0">
+          <div style="font-size:10px;color:#999;margin-bottom:2px">經手人（駕駛員）</div>
+          <div style="font-size:13px;font-weight:700;color:#042C53;height:30px;display:flex;align-items:center">林智仁</div>
+        </div>
+        <div style="padding:0 14px">
+          <div style="font-size:10px;color:#999;margin-bottom:2px">主任核准</div>
+          <img src="${STAMP_SUPERVISOR}" style="width:80%;height:38px;object-fit:contain;display:block">
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderReceipts(){
+  const body=document.getElementById('receipt-body');
+  if(!receiptsCache.length){ body.innerHTML='<div style="padding:30px;text-align:center;color:#999;font-size:13px">請選擇年月並按「產生本月所有收據」</div>'; return; }
+  body.innerHTML=receiptsCache.map(r=>`
+    <div style="margin-bottom:18px">
+      <div style="font-size:11px;color:#8099B0;margin-bottom:4px;font-weight:600">▌收執聯</div>
+      ${receiptCardHTML(r)}
+      <div style="font-size:11px;color:#8099B0;margin:8px 0 4px;font-weight:600">▌存根聯</div>
+      ${receiptCardHTML(r)}
+    </div>
+  `).join('<hr style="border:none;border-top:2px dashed #ddd;margin:20px 0">');
+}
+
+function exportReceiptsPDF(){
+  if(!receiptsCache.length){ alert('請先產生收據'); return; }
+  const win=window.open('','_blank','width=900,height=700');
+  const allHtml=receiptsCache.map(r=>`
+    <div style="page-break-after:always">
+      <div style="font-size:11px;color:#8099B0;margin-bottom:6px;font-weight:600">▌收執聯</div>
+      ${receiptCardHTML(r)}
+      <div style="font-size:11px;color:#8099B0;margin:14px 0 6px;font-weight:600">▌存根聯</div>
+      ${receiptCardHTML(r)}
+    </div>`).join('');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>BD03_收據_${document.getElementById('rc-y').value}年${document.getElementById('rc-m').value}月</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{font-family:'Noto Sans TC',sans-serif;margin:0;padding:16mm;background:#fff}
+    @page{size:A4;margin:10mm}
+  </style></head><body>${allHtml}
+  <script>window.onload=()=>setTimeout(()=>window.print(),400)</script>
+  </body></html>`);
+  win.document.close();
+}
+
 async function genMonthlyReport(){
   const y=document.getElementById('mr-y').value;
   const m=document.getElementById('mr-m').value;
