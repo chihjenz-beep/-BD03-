@@ -337,6 +337,31 @@ tr:hover td{background:#F8FBFD}
       <div class="field"><label>服務日期</label><input type="date" id="bk-date" onchange="autoWeekday()"></div>
       <div class="field"><label>星期</label><input type="text" id="bk-wd" readonly class="ro" placeholder="自動帶入"></div>
     </div>
+    <div class="grid1">
+      <div class="field">
+        <label style="font-size:12px;color:var(--muted);cursor:pointer;flex-direction:row;align-items:center;gap:6px;display:flex">
+          <input type="checkbox" id="bk-periodic" onchange="togglePeriodic()" style="width:auto">
+          週期性預約（依星期重複，一次產生整段期間）
+        </label>
+      </div>
+    </div>
+    <div id="bk-periodic-box" style="display:none">
+      <div class="grid2">
+        <div class="field"><label>結束日期</label><input type="date" id="bk-periodic-end"></div>
+        <div class="field">
+          <label>重複星期</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-1" style="width:auto">一</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-2" style="width:auto">二</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-3" style="width:auto">三</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-4" style="width:auto">四</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-5" style="width:auto">五</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-6" style="width:auto">六</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-0" style="width:auto">日</label>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="grid2">
       <div class="field">
         <label>使用者</label>
@@ -346,36 +371,50 @@ tr:hover td{background:#F8FBFD}
       </div>
       <div class="field"><label>電話</label><div class="info-box" id="disp-phone">—</div></div>
     </div>
-    <div class="grid2">
-      <div class="field"><label>性別</label><div class="info-box" id="disp-gender">—</div></div>
-      <div class="field">
-        <label>身分別</label>
-        <select id="bk-welfare">
-          <option value="一般戶">一般戶</option>
-          <option value="中低收入">中低收入</option>
-        </select>
-      </div>
-    </div>
     <div class="grid1">
       <div class="field"><label>案家地址</label><div class="info-box" id="disp-addr">—</div></div>
     </div>
     <div class="grid1">
-      <div class="field"><label>目的地址</label><input type="text" id="bk-dest" value="布袋鎮平安診所岑海里 C 據點"></div>
+      <div class="field">
+        <label style="font-size:12px;color:var(--muted);cursor:pointer;flex-direction:row;align-items:center;gap:6px;display:flex">
+          <input type="checkbox" id="bk-show-advanced" onchange="toggleBkAdvanced()" style="width:auto">
+          顯示進階欄位（身分別、目的地址、陪同人員、備註）
+        </label>
+      </div>
+    </div>
+    <div id="bk-advanced-1" style="display:none">
+      <div class="grid2">
+        <div class="field"><label>性別</label><div class="info-box" id="disp-gender">—</div></div>
+        <div class="field">
+          <label>身分別</label>
+          <select id="bk-welfare">
+            <option value="一般戶">一般戶</option>
+            <option value="中低收入">中低收入</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid1">
+        <div class="field"><label>目的地址</label><input type="text" id="bk-dest" value="布袋鎮平安診所岑海里 C 據點"></div>
+      </div>
     </div>
   </div>
   <div class="card">
     <div class="card-title">接送安排</div>
-    <div class="grid4">
+    <div class="grid2">
       <div class="field"><label>啟程時間（去程）</label><input type="time" id="bk-dep"></div>
       <div class="field"><label>回程時間</label><input type="time" id="bk-ret"></div>
-      <div class="field">
-        <label>陪同人員</label>
-        <select id="bk-companion">
-          <option value="無">無（不陪同）</option>
-          <option value="有">有（陪同）</option>
-        </select>
+    </div>
+    <div id="bk-advanced-2" style="display:none">
+      <div class="grid2">
+        <div class="field">
+          <label>陪同人員</label>
+          <select id="bk-companion">
+            <option value="無">無（不陪同）</option>
+            <option value="有">有（陪同）</option>
+          </select>
+        </div>
+        <div class="field"><label>備註</label><input type="text" id="bk-note" placeholder="特殊需求..."></div>
       </div>
-      <div class="field"><label>備註</label><input type="text" id="bk-note" placeholder="特殊需求..."></div>
     </div>
   </div>
   <div class="btn-row">
@@ -434,6 +473,10 @@ tr:hover td{background:#F8FBFD}
         </select>
       </div>
       <div class="field"><label>備註</label><input type="text" id="usr-memo" placeholder="備注事項..."></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>常用去程時間</label><input type="time" id="usr-defdep"></div>
+      <div class="field"><label>常用回程時間</label><input type="time" id="usr-defret"></div>
     </div>
     <div class="btn-row">
       <button class="btn btn-o" onclick="clearUserForm()">清除</button>
@@ -851,7 +894,7 @@ function sw(t){
 
 /* ---- User Management ---- */
 function clearUserForm(){
-  ['usr-name','usr-phone','usr-addr','usr-memo'].forEach(id=>document.getElementById(id).value='');
+  ['usr-name','usr-phone','usr-addr','usr-memo','usr-defdep','usr-defret'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('usr-dest').value='布袋鎮平安診所岑海里 C 據點';
   document.getElementById('usr-gender').value='女';
   document.getElementById('usr-welfare').value='一般戶';
@@ -875,7 +918,9 @@ function saveUser(){
     dest:document.getElementById('usr-dest').value.trim(),
     welfare:document.getElementById('usr-welfare').value,
     companion:document.getElementById('usr-companion').value,
-    memo:document.getElementById('usr-memo').value.trim()
+    memo:document.getElementById('usr-memo').value.trim(),
+    defDep:document.getElementById('usr-defdep').value,
+    defRet:document.getElementById('usr-defret').value
   };
   saveUsers();
   renderUserTable();
@@ -895,6 +940,8 @@ function editUser(name){
   document.getElementById('usr-welfare').value=u.welfare||'一般戶';
   document.getElementById('usr-companion').value=u.companion||'無';
   document.getElementById('usr-memo').value=u.memo||'';
+  document.getElementById('usr-defdep').value=u.defDep||'';
+  document.getElementById('usr-defret').value=u.defRet||'';
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function deleteUser(name){
@@ -923,6 +970,18 @@ function fillUser(){
   if(d.welfare)document.getElementById('bk-welfare').value=d.welfare;
   if(d.companion)document.getElementById('bk-companion').value=d.companion;
   if(d.dest)document.getElementById('bk-dest').value=d.dest;
+  if(d.defDep)document.getElementById('bk-dep').value=d.defDep;
+  if(d.defRet)document.getElementById('bk-ret').value=d.defRet;
+}
+// ── 進階欄位摺疊（身分別／目的地址／陪同人員／備註）──
+function toggleBkAdvanced(){
+  const show=document.getElementById('bk-show-advanced').checked;
+  document.getElementById('bk-advanced-1').style.display=show?'block':'none';
+  document.getElementById('bk-advanced-2').style.display=show?'block':'none';
+}
+// ── 週期性預約區塊顯示切換 ──
+function togglePeriodic(){
+  document.getElementById('bk-periodic-box').style.display=document.getElementById('bk-periodic').checked?'block':'none';
 }
 function clearBooking(){
   ['bk-date','bk-dep','bk-ret','bk-note'].forEach(id=>document.getElementById(id).value='');
@@ -930,6 +989,10 @@ function clearBooking(){
   document.getElementById('bk-user').value='';
   document.getElementById('bk-welfare').value='一般戶';
   document.getElementById('bk-companion').value='無';
+  document.getElementById('bk-periodic').checked=false;
+  document.getElementById('bk-periodic-end').value='';
+  [0,1,2,3,4,5,6].forEach(n=>document.getElementById('bk-wd-'+n).checked=false);
+  togglePeriodic();
   fillUser();
   document.getElementById('bk-alert').classList.remove('show');
   document.getElementById('bk-err').classList.remove('show');
@@ -944,28 +1007,92 @@ function saveBooking(){
   const bkDep=document.getElementById('bk-dep').value;
   const bkRet=document.getElementById('bk-ret').value;
   const today=new Date().toISOString().split('T')[0];
-  // 若預約日期已過，自動標記已派車並預填預設時間
-  const autoDispatched = (date < today);
-  bookings.push({
-    id:Date.now(),user,date,
+  const common={
+    user,
     phone:u.phone,gender:u.gender,
     addr:u.addr,
     welfare:document.getElementById('bk-welfare').value||'一般戶',
     dest:document.getElementById('bk-dest').value,
     dep:bkDep,
     ret:bkRet,
-    wd:document.getElementById('bk-wd').value,
     companion:document.getElementById('bk-companion').value,
-    note:document.getElementById('bk-note').value,
+    note:document.getElementById('bk-note').value
+  };
+  // ── 週期性預約：依勾選星期，於起訖日期區間內批量產生 ──
+  if(document.getElementById('bk-periodic').checked){
+    const endDate=document.getElementById('bk-periodic-end').value;
+    if(!endDate){err.textContent='請選擇週期性預約的結束日期';err.classList.add('show');return;}
+    if(endDate<date){err.textContent='結束日期不可早於起始日期';err.classList.add('show');return;}
+    const wdSet=new Set([0,1,2,3,4,5,6].filter(n=>document.getElementById('bk-wd-'+n).checked));
+    if(!wdSet.size){err.textContent='請至少勾選一個重複星期';err.classList.add('show');return;}
+    let added=0,skipped=0;
+    let cur=new Date(date+'T00:00:00');
+    const end=new Date(endDate+'T00:00:00');
+    while(cur<=end){
+      const ds=cur.toISOString().split('T')[0];
+      if(wdSet.has(cur.getDay())){
+        if(bookings.some(b=>b.user===user&&b.date===ds)){
+          skipped++;
+        } else {
+          const autoDispatched=(ds<today);
+          bookings.push({
+            id:Date.now()+added,
+            ...common,
+            date:ds,
+            wd:'星期'+WD[cur.getDay()],
+            dispatched:autoDispatched,
+            gdep:autoDispatched?bkDep:'',
+            rdep:autoDispatched?bkRet:''
+          });
+          added++;
+        }
+      }
+      cur.setDate(cur.getDate()+1);
+    }
+    save();
+    renderBkList();
+    const alertEl=document.getElementById('bk-alert');
+    alertEl.textContent=`✓ 已產生 ${added} 筆預約${skipped?`（${skipped} 筆同人同日重複已略過）`:''}`;
+    alertEl.classList.add('show');
+    setTimeout(()=>alertEl.classList.remove('show'),3500);
+    clearBooking();
+    return;
+  }
+  // 若預約日期已過，自動標記已派車並預填預設時間
+  const autoDispatched = (date < today);
+  bookings.push({
+    id:Date.now(),
+    ...common,
+    date,
+    wd:document.getElementById('bk-wd').value,
     dispatched:autoDispatched,
     gdep:autoDispatched?bkDep:'',
     rdep:autoDispatched?bkRet:''
   });
   save();
   renderBkList();
-  document.getElementById('bk-alert').classList.add('show');
-  setTimeout(()=>document.getElementById('bk-alert').classList.remove('show'),3000);
+  const alertEl=document.getElementById('bk-alert');
+  alertEl.textContent='✓ 預約已儲存。';
+  alertEl.classList.add('show');
+  setTimeout(()=>alertEl.classList.remove('show'),3000);
   clearBooking();
+}
+// ── 複製上次預約：帶入同一使用者的常用設定，僅需重新選日期 ──
+function copyBooking(id){
+  const b=bookings.find(x=>String(x.id)===String(id));
+  if(!b)return;
+  document.getElementById('bk-user').value=b.user;
+  fillUser();
+  document.getElementById('bk-welfare').value=b.welfare||'一般戶';
+  document.getElementById('bk-companion').value=b.companion||'無';
+  if(b.dest)document.getElementById('bk-dest').value=b.dest;
+  document.getElementById('bk-dep').value=b.dep||'';
+  document.getElementById('bk-ret').value=b.ret||'';
+  document.getElementById('bk-note').value=b.note||'';
+  document.getElementById('bk-date').value='';
+  document.getElementById('bk-wd').value='';
+  window.scrollTo({top:0,behavior:'smooth'});
+  showSync('已複製「'+b.user+'」的預約設定，請選擇新日期','#1E8449');
 }
 function delBooking(id){
   if(!confirm('確認刪除此預約？'))return;
@@ -1103,6 +1230,7 @@ function renderBkList(){
         ${b.note?`<span class="bk-note">📝 ${b.note}</span>`:''}
         <span class="tag ${b.dispatched?'tag-teal':'tag-general'}" style="font-size:10px;padding:2px 7px">${b.dispatched?'已派車':'待派'}</span>
         ${!b.dispatched?`<button class="bk-del" style="background:#EAFAF1;color:#1E8449;border-color:#A9DFBF;font-weight:700" onclick="quickDispatch('${b.id}')">✓ 快速派車</button>`:''}
+        <button class="bk-del" style="background:#EAF2FB;color:#1565C0;border-color:#BBD9F5;font-weight:700" onclick="copyBooking('${b.id}')">複製</button>
         <button class="bk-del" onclick="delBooking('${b.id}')">刪除</button>
       </div>`).join('');
 
@@ -2264,11 +2392,11 @@ async function genMonthlyReport(){
             </div>
             <div style="padding:12px 14px;border-right:1px solid #dde6f0">
               <div style="font-size:10px;color:#999;margin-bottom:2px">主任核准</div>
-              <img src="${STAMP_SUPERVISOR}" style="width:90%;height:44px;object-fit:contain;display:block;margin:0 auto 2px">
+              <img src="${STAMP_SUPERVISOR}" style="width:85px;height:38px;object-fit:contain;display:block">
             </div>
             <div style="padding:12px 14px">
               <div style="font-size:10px;color:#999;margin-bottom:2px">執行長核准</div>
-              <img src="${STAMP_CEO}" style="width:90%;height:44px;object-fit:contain;display:block;margin:0 auto 2px">
+              <img src="${STAMP_CEO}" style="width:85px;height:38px;object-fit:contain;display:block">
             </div>
           </div>`;
         })()}
@@ -2747,11 +2875,11 @@ function genDailyReport(){
         </div>
         <div style="padding:14px 16px;border-right:1px solid #dde6f0">
           <div style="font-size:11px;color:#999;margin-bottom:2px">主任核准</div>
-          <img src="${STAMP_SUPERVISOR}" style="width:90%;height:50px;object-fit:contain;display:block;margin:0 auto 2px">
+          <img src="${STAMP_SUPERVISOR}" style="width:85px;height:38px;object-fit:contain;display:block">
         </div>
         <div style="padding:14px 16px">
           <div style="font-size:11px;color:#999;margin-bottom:2px">執行長核准</div>
-          <img src="${STAMP_CEO}" style="width:90%;height:50px;object-fit:contain;display:block;margin:0 auto 2px">
+          <img src="${STAMP_CEO}" style="width:85px;height:38px;object-fit:contain;display:block">
         </div>
       </div>
     </div>`;
