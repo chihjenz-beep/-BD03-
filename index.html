@@ -530,7 +530,8 @@ tr:hover td{background:#F8FBFD}
     <div style="margin-top:14px;padding:14px 16px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
       <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;letter-spacing:.04em">✍️ 駕駛員簽名</div>
       <div style="position:relative;background:#fff;border:2px solid var(--border);border-radius:8px;overflow:hidden">
-        <canvas id="sign-canvas" style="display:block;width:100%;touch-action:none;cursor:crosshair" height="120"></canvas>
+        <img id="sign-preview" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;pointer-events:none">
+        <canvas id="sign-canvas" style="display:block;width:100%;touch-action:none;cursor:crosshair;position:relative" height="120"></canvas>
         <div id="sign-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#ccc;font-size:13px">請在此手寫簽名</div>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -1150,7 +1151,7 @@ function initSignCanvas(){
     return {x:(e.clientX-r.left)*scaleX, y:(e.clientY-r.top)*scaleY};
   };
   const start=(e)=>{ e.preventDefault(); signDrawing=true; const p=getPos(e); signCtx.beginPath(); signCtx.moveTo(p.x,p.y); };
-  const move=(e)=>{ if(!signDrawing)return; e.preventDefault(); const p=getPos(e); signCtx.lineTo(p.x,p.y); signCtx.stroke(); signHasMark=true; document.getElementById('sign-hint').style.display='none'; };
+  const move=(e)=>{ if(!signDrawing)return; e.preventDefault(); const p=getPos(e); signCtx.lineTo(p.x,p.y); signCtx.stroke(); signHasMark=true; document.getElementById('sign-hint').style.display='none'; document.getElementById('sign-preview').style.display='none'; };
   const end=()=>{ signDrawing=false; };
 
   signCanvas.addEventListener('mousedown',start);
@@ -1161,16 +1162,18 @@ function initSignCanvas(){
   signCanvas.addEventListener('touchmove',move,{passive:false});
   signCanvas.addEventListener('touchend',end);
 
-  // 依日期讀取對應簽名
+  // 依日期讀取對應簽名 —— 僅作為預覽顯示（獨立 <img>），不畫入 canvas，避免跨網域圖片（雲端 Drive 網址）污染 canvas 導致無法匯出
   const _date=document.getElementById('dp-date').value;
   const _key='pg_sign_'+(_date||'default');
   const _saved=(()=>{ try{ return localStorage.getItem(_key)||''; }catch(e){ return ''; } })();
+  const _preview=document.getElementById('sign-preview');
   if(_saved){
     driverSignDataUrl=_saved;
-    const img=new Image();
-    img.onload=()=>{ signCtx.save(); signCtx.scale(0.5,1); signCtx.drawImage(img,0,0); signCtx.restore(); };
-    img.src=_saved;
+    _preview.src=_saved;
+    _preview.style.display='block';
     document.getElementById('sign-hint').style.display='none';
+  } else {
+    _preview.style.display='none';
   }
 }
 
@@ -1183,6 +1186,7 @@ function clearDriverSign(){
   const key='pg_sign_'+(date||'default');
   try{ localStorage.removeItem(key); }catch(e){}
   document.getElementById('sign-hint').style.display='flex';
+  document.getElementById('sign-preview').style.display='none';
 }
 
 function saveDriverSign(date){
