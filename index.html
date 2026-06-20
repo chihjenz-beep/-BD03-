@@ -508,12 +508,41 @@ tr:hover td{background:#F8FBFD}
       <div class="field"><label>服務類別</label><input type="text" value="DB03" readonly class="ro"></div>
     </div>
   </div>
-  <div class="card">
-    <div class="card-title">駕駛員健康紀錄</div>
-    <div class="grid3">
-      <div class="field"><label>體溫（°C）</label><input type="number" id="dp-temp" placeholder="36.5" step="0.1" min="35" max="42" oninput="syncDispatchVitals()"></div>
-      <div class="field"><label>血壓（收縮/舒張 mmHg）</label><input type="text" id="dp-bp" placeholder="120/80" oninput="syncDispatchVitals()"></div>
-      <div class="field"><label>心跳（次/分）</label><input type="number" id="dp-hr" placeholder="72" min="40" max="150" oninput="syncDispatchVitals()"></div>
+  <div class="grid2" style="align-items:start">
+    <div class="card">
+      <div class="card-title">駕駛員健康紀錄</div>
+      <div class="grid3">
+        <div class="field"><label>體溫（°C）</label><input type="number" id="dp-temp" placeholder="36.5" step="0.1" min="35" max="42" oninput="syncDispatchVitals()"></div>
+        <div class="field"><label>血壓（收縮/舒張 mmHg）</label><input type="text" id="dp-bp" placeholder="120/80" oninput="syncDispatchVitals()"></div>
+        <div class="field"><label>心跳（次/分）</label><input type="number" id="dp-hr" placeholder="72" min="40" max="150" oninput="syncDispatchVitals()"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">車資收款紀錄表</div>
+      <div class="grid2">
+        <div class="field"><label>日期</label><input type="date" id="fee-date"></div>
+        <div class="field">
+          <label>個案</label>
+          <select id="fee-user">
+            <option value="">— 請選擇 —</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>金額（元）</label><input type="number" id="fee-amount" placeholder="0" min="0"></div>
+        <div class="field"><label>備註</label><input type="text" id="fee-note" placeholder="備註..."></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-o" onclick="clearFeeRecord()">清除</button>
+        <button class="btn btn-p" onclick="saveFeeRecord()">新增紀錄</button>
+      </div>
+      <div class="alert alert-s" id="fee-alert">✓ 收款紀錄已新增。</div>
+      <div class="alert alert-e" id="fee-err"></div>
+      <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">
+        <span>共 <span id="fee-count" style="font-weight:700;color:var(--td)">0</span> 筆</span>
+        <span>合計 <span id="fee-sum" style="font-weight:700;color:var(--td)">NT$ 0</span></span>
+      </div>
+      <div id="fee-list" style="margin-top:8px;max-height:280px;overflow-y:auto"></div>
     </div>
   </div>
   <div id="dp-users"></div>
@@ -717,17 +746,24 @@ async function loadUsers(){
     const r=await gasGet('getUsers');
     if(r&&r.ok&&Object.keys(r.data).length){
       USERS=r.data;
+      showSync('✓ 使用者已同步');
     } else {
-      // 第一次使用，寫入預設名單
-      USERS={
-        '何蔡菊枝':{phone:'05-3471291',gender:'女',addr:'布袋鎮光復里九龍六街 12 號',dest:'布袋鎮平安診所岑海里 C 據點',welfare:'一般戶',companion:'無',memo:''},
-        '張素月':{phone:'05-3472237',gender:'女',addr:'嘉義縣布袋鎮後寮路 72 巷 17 號',dest:'布袋鎮平安診所岑海里 C 據點',welfare:'一般戶',companion:'無',memo:''},
-        '蔡春菊':{phone:'05-3478095',gender:'女',addr:'',dest:'布袋鎮平安診所岑海里 C 據點',welfare:'一般戶',companion:'無',memo:''},
-        '王蔡淑連':{phone:'05-3477310',gender:'女',addr:'',dest:'布袋鎮平安診所岑海里 C 據點',welfare:'一般戶',companion:'無',memo:''}
-      };
-      await gasPost('saveUsers',USERS);
+      // 雲端回傳空值：絕不自動回寫雲端（避免覆蓋真實資料），改用本機快取
+      const cached=localStorage.getItem('pg_users');
+      if(cached && Object.keys(JSON.parse(cached)).length){
+        USERS=JSON.parse(cached);
+        showSync('⚠ 雲端無資料，已改用本機暫存','#F5A27A');
+      } else {
+        // 本機也無資料才使用範例預設名單（僅顯示，不會自動寫回雲端）
+        USERS={
+          '何蔡菊枝':{phone:'05-3471291',gender:'女',addr:'布袋鎮光復里九龍六街 12 號',dest:'布袋鎮平安診所岑海里 C 據點',welfare:'一般戶',companion:'無',memo:''},
+          '張素月':{phone:'05-3472237',gender:'女',addr:'嘉義縣布袋鎮後寮路 72 巷 17 號',dest:'布袋鎮平安診所岑海里 C 據點',welfare:'一般戶',companion:'無',memo:''},
+          '蔡春菊':{phone:'05-3478095',gender:'女',addr:'',dest:'布袋鎮平安診所岑海里 C 據點',welfare:'一般戶',companion:'無',memo:''},
+          '王蔡淑連':{phone:'05-3477310',gender:'女',addr:'',dest:'布袋鎮平安診所岑海里 C 據點',welfare:'一般戶',companion:'無',memo:''}
+        };
+        showSync('⚠ 雲端與本機皆無資料，顯示範例名單（未寫回雲端）','#F5A27A');
+      }
     }
-    showSync('✓ 使用者已同步');
   } catch(e){
     showSync('⚠ 網路錯誤，使用本機暫存','#F5A27A');
     const cached=localStorage.getItem('pg_users');
@@ -748,7 +784,7 @@ async function saveUsers(){
   }catch(e){showSync('⚠ 網路錯誤，已暫存本機','#F5A27A');}
 }
 function refreshUserSelect(){
-  ['bk-user','dp-user-filter'].forEach(id=>{
+  ['bk-user','dp-user-filter','fee-user'].forEach(id=>{
     const sel=document.getElementById(id);
     if(!sel)return;
     const cur=sel.value;
@@ -782,6 +818,80 @@ function renderUserTable(){
   }).join('');
   refreshUserSelect();
 }
+
+// ── 車資收款紀錄表（獨立手動登記，與派車單車資計算分開）──────────────
+let feeRecords=[];
+
+async function loadFeeRecords(){
+  const cached=JSON.parse(localStorage.getItem('pg_fee_records')||'[]');
+  feeRecords=cached;
+  try{
+    const r=await gasGet('getFeeRecords');
+    if(r&&r.ok&&Array.isArray(r.data)){
+      feeRecords=r.data;
+      localStorage.setItem('pg_fee_records',JSON.stringify(feeRecords));
+    }
+  }catch(e){}
+  renderFeeList();
+}
+async function persistFeeRecords(){
+  localStorage.setItem('pg_fee_records',JSON.stringify(feeRecords));
+  try{ await gasPost('saveFeeRecords',feeRecords); }catch(e){}
+}
+function clearFeeRecord(){
+  document.getElementById('fee-date').value='';
+  document.getElementById('fee-user').value='';
+  document.getElementById('fee-amount').value='';
+  document.getElementById('fee-note').value='';
+  document.getElementById('fee-alert').classList.remove('show');
+  document.getElementById('fee-err').classList.remove('show');
+}
+function saveFeeRecord(){
+  const date=document.getElementById('fee-date').value;
+  const user=document.getElementById('fee-user').value;
+  const amount=parseFloat(document.getElementById('fee-amount').value);
+  const err=document.getElementById('fee-err');
+  if(!date||!user||!amount||amount<=0){err.textContent='請填寫日期、個案，並輸入大於 0 的金額';err.classList.add('show');return;}
+  err.classList.remove('show');
+  feeRecords.push({
+    id:Date.now(),
+    date,user,amount,
+    note:document.getElementById('fee-note').value.trim()
+  });
+  persistFeeRecords();
+  renderFeeList();
+  // 保留日期，方便連續登記同一天多筆收款
+  document.getElementById('fee-user').value='';
+  document.getElementById('fee-amount').value='';
+  document.getElementById('fee-note').value='';
+  document.getElementById('fee-alert').classList.add('show');
+  setTimeout(()=>document.getElementById('fee-alert').classList.remove('show'),3000);
+}
+function delFeeRecord(id){
+  if(!confirm('確認刪除此收款紀錄？'))return;
+  feeRecords=feeRecords.filter(f=>String(f.id)!==String(id));
+  persistFeeRecords();
+  renderFeeList();
+}
+function renderFeeList(){
+  const list=document.getElementById('fee-list');
+  const sorted=[...feeRecords].sort((a,b)=>b.date.localeCompare(a.date)||(b.id-a.id));
+  document.getElementById('fee-count').textContent=feeRecords.length;
+  document.getElementById('fee-sum').textContent='NT$ '+feeRecords.reduce((s,f)=>s+(parseFloat(f.amount)||0),0).toLocaleString();
+  if(!sorted.length){list.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px 0">尚無收款紀錄</div>';return;}
+  list.innerHTML=sorted.map(f=>{
+    const d=new Date(f.date+'T00:00:00');
+    const roc=`${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    return `<div class="bk-item">
+      <span style="font-size:11px;color:var(--muted);white-space:nowrap">${roc}</span>
+      <span class="bk-name">${f.user}</span>
+      <span style="font-size:13px;font-weight:700;color:var(--td)">NT$${Math.round(f.amount).toLocaleString()}</span>
+      ${f.note?`<span class="bk-note">📝 ${f.note}</span>`:''}
+      <button class="bk-del" onclick="delFeeRecord('${f.id}')">刪除</button>
+    </div>`;
+  }).join('');
+}
+
 const CHK_COLS=['油量','引擎','煞車動力','儀錶板顯示','行車紀錄器','乘客安全帶','輪胎','空調冷氣','車燈','車體外部整潔','車體內部整潔','無其他異常'];
 const CLN_COLS=['板金','擋風玻璃','車窗','儀錶板','方向盤','乘客安全帶','排檔','座椅','門把','地毯','衛生紙補充','宣導文件補充'];
 
@@ -852,8 +962,8 @@ async function loadBookings(){
             wd: b.wd || (b.date ? '星期'+WD[new Date(String(b.date).split('T')[0]+'T00:00:00').getDay()] : ''),
             phone: b.phone || b.Phone || b.tel || b.Tel || (USERS[b.user]&&USERS[b.user].phone) || ''
           }));
-          await gasPost('saveBookings',bookings);
-          showSync('✓ 本機資料已上傳至試算表');
+          // 注意：雲端回傳空值時絕不自動回寫雲端（避免本機舊資料覆蓋雲端），僅顯示本機快取
+          showSync('⚠ 雲端目前無資料，已顯示本機暫存（尚未自動回寫雲端）','#F5A27A');
         } else {
           bookings=[];
           showSync('✓ 連線正常（尚無預約紀錄）');
@@ -2937,6 +3047,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   autoWeekday();
   document.getElementById('bk-dep').value='08:50';
   document.getElementById('bk-ret').value='11:50';
+  document.getElementById('fee-date').value=today;
 
   if(!GAS_URL){
     // 尚未設定 GAS_URL，使用本機資料
@@ -2945,9 +3056,11 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     inspectData=JSON.parse(localStorage.getItem('pg_inspect')||'{}');
     cleanData=JSON.parse(localStorage.getItem('pg_clean')||'{}');
     vitalsData=JSON.parse(localStorage.getItem('pg_vitals')||'{}');
+    feeRecords=JSON.parse(localStorage.getItem('pg_fee_records')||'[]');
     refreshUserSelect();
     renderBkList();
     renderUserTable();
+    renderFeeList();
     showSync('⚠ 尚未設定雲端連線，使用本機模式','#F5A27A');
     return;
   }
@@ -2958,7 +3071,8 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     loadBookings(),
     loadInspect(),
     loadClean(),
-    loadVitals()
+    loadVitals(),
+    loadFeeRecords()
   ]);
   // 補齊 phone（若 bookings 先載入時 USERS 尚未就緒）
   bookings=bookings.map(b=>({
