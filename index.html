@@ -650,11 +650,17 @@ tr:hover td{background:#F8FBFD}
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <button class="nav-btn active" id="rec-tab-date" onclick="switchRecordTab('date')" style="border-radius:8px;padding:8px 16px">📅 依日期（現行）</button>
       <button class="nav-btn" id="rec-tab-user" onclick="switchRecordTab('user')" style="border-radius:8px;padding:8px 16px">👤 依人別・按月</button>
+      <button class="nav-btn" id="rec-tab-annual" onclick="switchRecordTab('annual')" style="border-radius:8px;padding:8px 16px">📋 年度服務總表</button>
     </div>
-    <div class="grid3">
+    <div class="grid3" id="rec-month-row">
       <div class="field"><label>民國年份</label><input type="number" id="rec-y" value="115" min="115" max="130"></div>
       <div class="field"><label>月份</label><select id="rec-m"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5" selected>5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></div>
       <div class="field" style="justify-content:flex-end"><label>&nbsp;</label><div style="display:flex;gap:8px" id="rec-btn-group"><button class="btn btn-p" onclick="genRecord()">產生紀錄表</button><button class="btn btn-amber" onclick="exportRecordExcel()">匯出 Excel</button></div></div>
+    </div>
+    <div class="grid3" id="rec-annual-row" style="display:none">
+      <div class="field"><label>民國年份</label><input type="number" id="rec-annual-y" value="115" min="115" max="130"></div>
+      <div class="field"></div>
+      <div class="field" style="justify-content:flex-end"><label>&amp;nbsp;</label><div style="display:flex;gap:8px"><button class="btn btn-p" onclick="genAnnualReport()">產生年度總表</button><button class="btn btn-amber" onclick="exportAnnualExcel()">匯出 Excel</button></div></div>
     </div>
   </div>
   <div id="rec-out"></div>
@@ -1719,14 +1725,129 @@ function switchRecordTab(mode){
   recordTabMode=mode;
   document.getElementById('rec-tab-date').classList.toggle('active', mode==='date');
   document.getElementById('rec-tab-user').classList.toggle('active', mode==='user');
+  document.getElementById('rec-tab-annual').classList.toggle('active', mode==='annual');
+  // 切換月份/年度篩選列顯示
+  document.getElementById('rec-month-row').style.display = mode==='annual' ? 'none' : '';
+  document.getElementById('rec-annual-row').style.display = mode==='annual' ? '' : 'none';
   const btnGroup=document.getElementById('rec-btn-group');
   if(mode==='date'){
     btnGroup.innerHTML=`<button class="btn btn-p" onclick="genRecord()">產生紀錄表</button><button class="btn btn-amber" onclick="exportRecordExcel()">匯出 Excel</button>`;
     genRecord();
+  }else if(mode==='annual'){
+    genAnnualReport();
   }else{
     btnGroup.innerHTML=`<button class="btn btn-p" onclick="genRecordByUser()">產生紀錄表</button><button class="btn btn-amber" onclick="exportRecordByUserExcel()">匯出 Excel</button>`;
     genRecordByUser();
   }
+}
+
+// ── 年度服務總表 ──
+function genAnnualReport(){
+  const y = parseInt(document.getElementById('rec-annual-y').value);
+  const out = document.getElementById('rec-out');
+  const yearItems = bookings.filter(b=>{
+    if(!b.date) return false;
+    return (new Date(b.date+'T12:00:00').getFullYear()-1911) === y;
+  });
+  if(!yearItems.length){
+    out.innerHTML='<div class="card" style="color:var(--muted)">民國'+y+'年無預約紀錄。</div>';
+    return;
+  }
+  const months = Array.from({length:12},(_,i)=>i+1);
+  const stats = months.map(m=>{
+    const mItems = yearItems.filter(b=>(new Date(b.date+'T12:00:00').getMonth()+1)===m);
+    const days = new Set(mItems.map(b=>b.date)).size;
+    const persons = mItems.length;
+    let trips = 0;
+    mItems.forEach(b=>{
+      if(b.gdep||b.garr) trips++;
+      if(b.rdep||b.rarr) trips++;
+    });
+    return {m, days, persons, trips, hasData: mItems.length>0};
+  });
+  const totalDays    = stats.reduce((s,r)=>s+r.days,0);
+  const totalPersons = stats.reduce((s,r)=>s+r.persons,0);
+  const totalTrips   = stats.reduce((s,r)=>s+r.trips,0);
+  const rows = stats.map(r=>`
+    <tr style="${r.hasData?'':'color:var(--muted)'}">
+      <td style="font-weight:600">${r.m} 月</td>
+      <td>${r.hasData?r.days:'—'}</td>
+      <td>${r.hasData?r.persons:'—'}</td>
+      <td>${r.hasData?r.trips:'—'}</td>
+    </tr>`).join('');
+  out.innerHTML=`<div class="card">
+    <div class="card-title">BD03 社區式交通接送 年度服務總表 — 民國 ${y} 年</div>
+    <div style="margin-bottom:12px;font-size:12px;color:var(--muted)">
+      人次＝每筆預約為1人次；趟次＝有去程計1趟、有回程計1趟（一人來回＝2趟）
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>月份</th><th>服務天數</th><th>服務人次</th><th>趟次</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="font-weight:700;background:var(--tl)">
+          <td>全年合計</td>
+          <td>${totalDays}</td>
+          <td>${totalPersons}</td>
+          <td>${totalTrips}</td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:var(--t);background:var(--tl);border-radius:8px;padding:8px 14px">
+      ⚠ 趟次統計以派車單實際記錄為準（去程或回程有填寫出發／抵達時間者才計入）
+    </div>
+  </div>`;
+}
+
+function exportAnnualExcel(){
+  const y = parseInt(document.getElementById('rec-annual-y').value);
+  const yearItems = bookings.filter(b=>{
+    if(!b.date) return false;
+    return (new Date(b.date+'T12:00:00').getFullYear()-1911) === y;
+  });
+  const months = Array.from({length:12},(_,i)=>i+1);
+  const stats = months.map(m=>{
+    const mItems = yearItems.filter(b=>(new Date(b.date+'T12:00:00').getMonth()+1)===m);
+    const days = new Set(mItems.map(b=>b.date)).size;
+    const persons = mItems.length;
+    let trips = 0;
+    mItems.forEach(b=>{
+      if(b.gdep||b.garr) trips++;
+      if(b.rdep||b.rarr) trips++;
+    });
+    return [m+'月', mItems.length?days:'', mItems.length?persons:'', mItems.length?trips:''];
+  });
+  const totalDays    = stats.reduce((s,r)=>s+(r[1]||0),0);
+  const totalPersons = stats.reduce((s,r)=>s+(r[2]||0),0);
+  const totalTrips   = stats.reduce((s,r)=>s+(r[3]||0),0);
+  const wb = XLSX.utils.book_new();
+  const ws = {};
+  const hStyle = {font:{bold:true,sz:11,name:'新細明體'},alignment:{horizontal:'center'}};
+  const numC  = {font:{sz:11,name:'新細明體'},alignment:{horizontal:'center'}};
+  const boldC = {font:{bold:true,sz:11,name:'新細明體'},alignment:{horizontal:'center'}};
+  ws['A1']={v:'嘉義縣平安家園多元關懷協會  BD03 社區式交通接送 年度服務總表  民國'+y+'年',t:'s',s:{font:{bold:true,sz:13,name:'新細明體'},alignment:{horizontal:'center'}}};
+  ws['A2']={v:'月份',t:'s',s:hStyle};
+  ws['B2']={v:'服務天數',t:'s',s:hStyle};
+  ws['C2']={v:'服務人次',t:'s',s:hStyle};
+  ws['D2']={v:'趟次',t:'s',s:hStyle};
+  stats.forEach((row,i)=>{
+    const r=i+3;
+    ws['A'+r]={v:row[0],t:'s',s:numC};
+    ws['B'+r]={v:row[1]===''?'':row[1],t:row[1]===''?'s':'n',s:numC};
+    ws['C'+r]={v:row[2]===''?'':row[2],t:row[2]===''?'s':'n',s:numC};
+    ws['D'+r]={v:row[3]===''?'':row[3],t:row[3]===''?'s':'n',s:numC};
+  });
+  const fr=15;
+  ws['A'+fr]={v:'全年合計',t:'s',s:boldC};
+  ws['B'+fr]={v:totalDays,t:'n',s:boldC};
+  ws['C'+fr]={v:totalPersons,t:'n',s:boldC};
+  ws['D'+fr]={v:totalTrips,t:'n',s:boldC};
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:3}}];
+  ws['!cols']=[{wch:10},{wch:12},{wch:12},{wch:10}];
+  ws['!ref']='A1:D'+fr;
+  XLSX.utils.book_append_sheet(wb,ws,'年度服務總表');
+  XLSX.writeFile(wb,'平安家園_BD03_年度服務總表_民國'+y+'年.xlsx');
 }
 
 // ── 以人別、按月份彙整的出勤紀錄表 ──
