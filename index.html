@@ -427,9 +427,14 @@ tr:hover td{background:#F8FBFD}
   <div class="alert alert-e" id="bk-err"></div>
 
   <div id="bk-list-sec" style="display:none;margin-top:16px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px">
       <div style="font-size:13px;font-weight:700;color:var(--td)">預約列表</div>
-      <div style="font-size:12px;color:var(--muted)">共 <span id="bk-count" style="font-weight:700;color:var(--td)">0</span> 筆 ／ <span id="bk-day-count" style="font-weight:700;color:var(--td)">0</span> 天</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--muted)">共 <span id="bk-count" style="font-weight:700;color:var(--td)">0</span> 筆 ／ <span id="bk-day-count" style="font-weight:700;color:var(--td)">0</span> 天</div>
+        <input type="date" id="bk-del-date" style="padding:5px 8px;font-size:12px;width:auto;border:1px solid #CCD1D9;border-radius:4px">
+        <button class="btn btn-o btn-sm" onclick="delBookingsByDate()">刪除該日</button>
+        <button class="btn btn-sm" style="background:#fff;color:#922B21;border-color:#F5B7B1" onclick="delAllBookings()">全部刪除</button>
+      </div>
     </div>
     <div id="bk-list"></div>
   </div>
@@ -810,16 +815,23 @@ async function fbSaveAllBookings(list){
     // JSON 轉一輪可去除 undefined 欄位（Firestore 不接受 undefined 值）
     const clean=list.map(b=>JSON.parse(JSON.stringify(b)));
     const currentIds=new Set(clean.map(b=>String(b.id)));
-    const batch=db.batch();
-    clean.forEach(b=>{
-      batch.set(db.collection(FB_BOOKINGS_COLLECTION).doc(String(b.id)), b);
-    });
+    const ops=[];
+    clean.forEach(b=>ops.push({type:'set',id:String(b.id),data:b}));
     bookingDocIds.forEach(id=>{
-      if(!currentIds.has(id)){
-        batch.delete(db.collection(FB_BOOKINGS_COLLECTION).doc(id));
-      }
+      if(!currentIds.has(id)) ops.push({type:'delete',id});
     });
-    await batch.commit();
+    // 分批處理，避免單一批次操作數超過 Firestore 500 筆上限
+    // （例如「全部刪除」時一次刪除大量文件）
+    const CHUNK=400;
+    for(let i=0;i<ops.length;i+=CHUNK){
+      const batch=db.batch();
+      ops.slice(i,i+CHUNK).forEach(op=>{
+        const ref=db.collection(FB_BOOKINGS_COLLECTION).doc(op.id);
+        if(op.type==='set') batch.set(ref,op.data);
+        else batch.delete(ref);
+      });
+      await batch.commit();
+    }
     bookingDocIds=currentIds;
     return {ok:true};
   }catch(e){
@@ -1302,6 +1314,36 @@ function delBooking(id){
   save();renderBkList();
 }
 
+// ── 依指定日期刪除當天全部預約 ──
+function delBookingsByDate(){
+  const dt=document.getElementById('bk-del-date').value;
+  if(!dt){alert('請先選擇要刪除的日期');return;}
+  delBookingsForDay(dt);
+}
+
+// ── 刪除指定日期的全部預約（供上方日期選擇按鈕與日別群組按鈕共用）──
+function delBookingsForDay(dt){
+  const cnt=bookings.filter(b=>b.date===dt).length;
+  if(!cnt){alert(dt+' 當天沒有任何預約紀錄');return;}
+  if(!confirm(`確認刪除 ${dt} 當天共 ${cnt} 筆預約？此動作無法復原。`))return;
+  bookings=bookings.filter(b=>b.date!==dt);
+  save();
+  renderBkList();
+  showSync(`✓ 已刪除 ${dt} 共 ${cnt} 筆預約`,'#1E8449');
+}
+
+// ── 刪除全部預約紀錄 ──
+function delAllBookings(){
+  if(!bookings.length){alert('目前沒有任何預約紀錄');return;}
+  const total=bookings.length;
+  if(!confirm(`⚠️ 確認要刪除全部 ${total} 筆預約紀錄嗎？此動作無法復原！`))return;
+  if(!confirm('再次確認：這將清空所有預約資料（含已派車紀錄），確定要繼續嗎？'))return;
+  bookings=[];
+  save();
+  renderBkList();
+  showSync('✓ 已清空所有預約紀錄','#1E8449');
+}
+
 // ── 快速派車：直接在預約列表點一下標記已派車 ──
 async function quickDispatch(id){
   const idx=bookings.findIndex(b=>String(b.id)===String(id));
@@ -1445,6 +1487,7 @@ function renderBkList(){
         <div class="bk-day-wd">${wd}</div>
         <div class="bk-day-badge">${gList.length} 人</div>
         ${statusTxt}
+        <button class="bk-del" style="background:#FDEDEC;color:#922B21;border-color:#F5B7B1;margin-left:6px" onclick="event.stopPropagation();delBookingsForDay('${dt}')">刪除整日</button>
         <span style="color:#B5D4F4;font-size:14px;margin-left:4px">▾</span>
       </div>
       <div class="bk-day-body">${items}</div>
