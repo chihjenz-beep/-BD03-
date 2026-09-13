@@ -351,15 +351,13 @@ tr:hover td{background:#F8FBFD}
       <div class="grid2">
         <div class="field"><label>結束日期</label><input type="date" id="bk-periodic-end"></div>
         <div class="field">
-          <label>重複星期</label>
+          <label>重複星期<span style="font-weight:400;color:var(--muted2)">（本服務僅提供週一至週五接送）</span></label>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
             <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-1" style="width:auto">一</label>
             <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-2" style="width:auto">二</label>
             <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-3" style="width:auto">三</label>
             <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-4" style="width:auto">四</label>
             <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-5" style="width:auto">五</label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-6" style="width:auto">六</label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="bk-wd-0" style="width:auto">日</label>
           </div>
         </div>
       </div>
@@ -1017,9 +1015,14 @@ async function loadBookings(){
     const localBase64 = (local.photoData && local.photoData.startsWith('data:')) ? local.photoData : '';
     const cloudBase64 = (b.photoData && b.photoData.startsWith('data:')) ? b.photoData : '';
     const bestPhoto = cloudUrl || localUrl || localBase64 || cloudBase64;
-    // 簽名 URL：雲端優先，其次本機
-    const bestSignUrl = (b.signUrl&&b.signUrl.startsWith('http')) ? b.signUrl
-                      : (local.signUrl&&local.signUrl.startsWith('http')) ? local.signUrl : '';
+    // 簽名：雲端 http URL > 本機 http URL > 本機 base64 > 雲端 base64
+    // （先前版本只認 http 網址，因此改為 base64 直存 Firestore 後，
+    //   其他裝置載入時會把簽名誤判為空，這裡補上 base64 的容錯）
+    const cloudSignUrl = (b.signUrl && b.signUrl.startsWith('http')) ? b.signUrl : '';
+    const localSignUrl = (local.signUrl && local.signUrl.startsWith('http')) ? local.signUrl : '';
+    const localSignBase64 = (local.signUrl && local.signUrl.startsWith('data:')) ? local.signUrl : '';
+    const cloudSignBase64 = (b.signUrl && b.signUrl.startsWith('data:')) ? b.signUrl : '';
+    const bestSignUrl = cloudSignUrl || localSignUrl || localSignBase64 || cloudSignBase64;
     return {
       ...b,
       id:String(b.id),
@@ -1040,21 +1043,15 @@ async function loadBookings(){
         bookings=r.data.map(mergeBooking);
         // 存回 localStorage（含照片資料）
         localStorage.setItem('pg_bookings',JSON.stringify(bookings));
-        // 把雲端的簽名 URL 寫回 localStorage，讓手機也能讀到
+        // 把雲端的簽名寫回 localStorage，讓其他裝置（如 PC）也能讀到手機端簽的名
         const signByDate={};
         bookings.forEach(b=>{
-          if(b.signUrl&&b.signUrl.startsWith('http')&&b.date){
+          if(b.signUrl&&b.date){
             signByDate[b.date]=b.signUrl;
           }
         });
         Object.entries(signByDate).forEach(([dt,url])=>{
-          try{
-            const existing=localStorage.getItem('pg_sign_'+dt);
-            // 只有在本機沒有或本機是 base64 時才用雲端 URL 覆蓋
-            if(!existing||existing.startsWith('data:')){
-              localStorage.setItem('pg_sign_'+dt, url);
-            }
-          }catch(e){}
+          try{ localStorage.setItem('pg_sign_'+dt, url); }catch(e){}
         });
         showSync('✓ 預約紀錄已同步');
       } else {
@@ -1170,8 +1167,16 @@ function deleteUser(name){
 function autoWeekday(){
   const v=document.getElementById('bk-date').value;
   if(!v)return;
-  const d=new Date(v);
+  const d=new Date(v+'T00:00:00');
   document.getElementById('bk-wd').value='星期'+WD[d.getDay()];
+  const err=document.getElementById('bk-err');
+  // 本服務僅提供週一至週五接送，選到週末先即時提醒（實際擋下在儲存時執行）
+  if(!document.getElementById('bk-periodic').checked && (d.getDay()===0||d.getDay()===6)){
+    err.textContent='⚠ 所選日期為週末，本服務僅提供週一至週五接送';
+    err.classList.add('show');
+  } else if(err.textContent.indexOf('週末')>=0){
+    err.classList.remove('show');
+  }
 }
 function fillUser(){
   const u=document.getElementById('bk-user').value;
@@ -1205,7 +1210,7 @@ function clearBooking(){
   document.getElementById('bk-companion').value='無';
   document.getElementById('bk-periodic').checked=false;
   document.getElementById('bk-periodic-end').value='';
-  [0,1,2,3,4,5,6].forEach(n=>document.getElementById('bk-wd-'+n).checked=false);
+  [1,2,3,4,5].forEach(n=>document.getElementById('bk-wd-'+n).checked=false);
   togglePeriodic();
   fillUser();
   document.getElementById('bk-alert').classList.remove('show');
@@ -1237,7 +1242,8 @@ function saveBooking(){
     const endDate=document.getElementById('bk-periodic-end').value;
     if(!endDate){err.textContent='請選擇週期性預約的結束日期';err.classList.add('show');return;}
     if(endDate<date){err.textContent='結束日期不可早於起始日期';err.classList.add('show');return;}
-    const wdSet=new Set([0,1,2,3,4,5,6].filter(n=>document.getElementById('bk-wd-'+n).checked));
+    // 本服務僅提供週一至週五，重複星期只會有 1~5 可勾選
+    const wdSet=new Set([1,2,3,4,5].filter(n=>document.getElementById('bk-wd-'+n).checked));
     if(!wdSet.size){err.textContent='請至少勾選一個重複星期';err.classList.add('show');return;}
     let added=0,skipped=0;
     let cur=new Date(date+'T00:00:00');
@@ -1274,6 +1280,13 @@ function saveBooking(){
   }
   // 若預約日期已過，自動標記已派車並預填預設時間
   const autoDispatched = (date < today);
+  // 本服務僅提供週一至週五接送，單次預約日期不可為週六、週日
+  const dowCheck=new Date(date+'T00:00:00').getDay();
+  if(dowCheck===0||dowCheck===6){
+    err.textContent='服務日期為週六或週日，本服務僅提供週一至週五接送，請重新選擇日期';
+    err.classList.add('show');
+    return;
+  }
   bookings.push({
     id:Date.now(),
     ...common,
@@ -2568,7 +2581,7 @@ async function genMonthlyReport(){
       if(stored.photoData&&stored.photoData.startsWith('http')) b.photoData=stored.photoData;
       else if(!b.photoData&&stored.photoData) b.photoData=stored.photoData;
       if(stored.photoTime&&!b.photoTime) b.photoTime=stored.photoTime;
-      if(stored.signUrl&&stored.signUrl.startsWith('http')) b.signUrl=stored.signUrl;
+      if(stored.signUrl&&!b.signUrl) b.signUrl=stored.signUrl;
     }
   });
 
