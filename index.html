@@ -1316,7 +1316,9 @@ function saveBooking(){
 function copyBooking(id){
   const b=bookings.find(x=>String(x.id)===String(id));
   if(!b)return;
-  document.getElementById('bk-user').value=b.user;
+  // 只複製「預約時間規則」（目的地／去回程時間／陪同／備註），
+  // 使用者需自行重新選擇，不鎖定原本的人
+  document.getElementById('bk-user').value='';
   fillUser();
   document.getElementById('bk-welfare').value=b.welfare||'一般戶';
   document.getElementById('bk-companion').value=b.companion||'無';
@@ -1327,7 +1329,8 @@ function copyBooking(id){
   document.getElementById('bk-date').value='';
   document.getElementById('bk-wd').value='';
   window.scrollTo({top:0,behavior:'smooth'});
-  showSync('已複製「'+b.user+'」的預約設定，請選擇新日期','#1E8449');
+  showSync('已複製預約時間規則，請選擇使用者與新日期','#1E8449');
+  document.getElementById('bk-user').focus();
 }
 function delBooking(id){
   if(!confirm('確認刪除此預約？'))return;
