@@ -714,6 +714,14 @@ tr:hover td{background:#F8FBFD}
 
 <script>
 const WD=['日','一','二','三','四','五','六'];
+// ── 將 Date 物件轉為「本地時區」的 YYYY-MM-DD 字串 ──
+// 注意：不可用 date.toISOString().split('T')[0]，因為 toISOString() 一律轉成 UTC 時間；
+// 在台灣（UTC+8）等時區，本地午夜 00:00 換算成 UTC 會是「前一天」傍晚，
+// 導致產生的日期字串整整早了一天（例如週期性預約會誤生成週日的紀錄）。
+function toLocalISO(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 
 // ═══════════════════════════════════════════════════════
 // ▼▼▼  貼上您的 Firebase 專案設定（Firebase Console → 專案設定 → 一般 → 您的應用程式 → SDK 設定）  ▼▼▼
@@ -1225,7 +1233,7 @@ function saveBooking(){
   const u=USERS[user];
   const bkDep=document.getElementById('bk-dep').value;
   const bkRet=document.getElementById('bk-ret').value;
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalISO(new Date());
   const common={
     user,
     phone:u.phone,gender:u.gender,
@@ -1249,7 +1257,7 @@ function saveBooking(){
     let cur=new Date(date+'T00:00:00');
     const end=new Date(endDate+'T00:00:00');
     while(cur<=end){
-      const ds=cur.toISOString().split('T')[0];
+      const ds=toLocalISO(cur);
       if(wdSet.has(cur.getDay())){
         if(bookings.some(b=>b.user===user&&b.date===ds)){
           skipped++;
@@ -3255,7 +3263,7 @@ window.addEventListener('resize', syncHeaderHeight);
 
 // Init
 window.addEventListener('DOMContentLoaded', async ()=>{
-  const today=new Date().toISOString().split('T')[0];
+  const today=toLocalISO(new Date());
   document.getElementById('bk-date').value=today;
   autoWeekday();
   document.getElementById('bk-dep').value='08:50';
