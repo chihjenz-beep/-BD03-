@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>嘉義縣平安家園多元關懷協會 BD03 交通接送管理系統</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -711,10 +713,31 @@ tr:hover td{background:#F8FBFD}
 const WD=['日','一','二','三','四','五','六'];
 
 // ═══════════════════════════════════════════════════════
-// ▼▼▼  貼上您的 Apps Script 部署網址  ▼▼▼
+// ▼▼▼  貼上您的 Firebase 專案設定（Firebase Console → 專案設定 → 一般 → 您的應用程式 → SDK 設定）  ▼▼▼
 // ═══════════════════════════════════════════════════════
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbw4z1xs4ZlgATWzsGVt7hSLsDyManC50SkNiV3_wEzuwb5slrFFXVZiBrqFNURZXIX9uw/exec';
+const firebaseConfig = {
+  apiKey: "AIzaSyBxz9NGnpnF6lzy5TcRGWFOrDYFIVkGpjw",
+  authDomain: "vehicle-b4ae5.firebaseapp.com",
+  projectId: "vehicle-b4ae5",
+  storageBucket: "vehicle-b4ae5.firebasestorage.app",
+  messagingSenderId: "623928657886",
+  appId: "1:623928657886:web:7f8e3513556e2b440b3f4f"
+};
 // ═══════════════════════════════════════════════════════
+const FB_COLLECTION = 'bd03'; // Firestore 集合名稱，所有資料集中放在此集合下的各文件中
+
+let db=null, FIREBASE_READY=false;
+try{
+  if(firebaseConfig.apiKey && firebaseConfig.apiKey!=='YOUR_API_KEY'){
+    firebase.initializeApp(firebaseConfig);
+    db=firebase.firestore();
+    FIREBASE_READY=true;
+  } else {
+    console.warn('尚未設定 firebaseConfig，將使用本機模式');
+  }
+}catch(e){
+  console.error('Firebase 初始化失敗:',e);
+}
 
 // ── 同步狀態指示 ────────────────────────────────────────
 function showSync(msg, color='#7DCBB8'){
@@ -731,16 +754,78 @@ function showSync(msg, color='#7DCBB8'){
   el._t=setTimeout(()=>el.style.opacity='0',2500);
 }
 
-// ── GAS 呼叫 ────────────────────────────────────────────
-async function gasGet(action){
-  if(!GAS_URL){console.warn('尚未設定 GAS_URL');return null;}
-  const res=await fetch(`${GAS_URL}?action=${action}`);
-  return res.json();
+// ── Firestore 讀寫（取代原本的 gasGet / gasPost）───────────
+// 每個資料集整包以 JSON 字串存放在 bd03/{docId} 文件的 json 欄位中，
+// 避免資料內容中的特殊字元（如中文欄位鍵值含 "|"）觸發 Firestore 欄位命名限制。
+async function fbGet(docId){
+  if(!FIREBASE_READY){console.warn('尚未設定 Firebase');return null;}
+  try{
+    const snap=await db.collection(FB_COLLECTION).doc(docId).get();
+    if(!snap.exists) return {ok:true,data:null};
+    const raw=snap.data();
+    const parsed=(raw && typeof raw.json==='string') ? JSON.parse(raw.json) : null;
+    return {ok:true,data:parsed};
+  }catch(e){
+    console.error('fbGet 錯誤('+docId+'):',e);
+    throw e;
+  }
 }
-async function gasPost(action, data){
-  if(!GAS_URL){console.warn('尚未設定 GAS_URL');return null;}
-  const res=await fetch(GAS_URL,{method:'POST',body:JSON.stringify({action,data})});
-  return res.json();
+async function fbSet(docId, data){
+  if(!FIREBASE_READY){console.warn('尚未設定 Firebase');return null;}
+  try{
+    await db.collection(FB_COLLECTION).doc(docId).set({
+      json:JSON.stringify(data),
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return {ok:true};
+  }catch(e){
+    console.error('fbSet 錯誤('+docId+'):',e);
+    throw e;
+  }
+}
+
+// ── 預約紀錄（bookings）改用「每筆一份文件」的方式存放 ──────────
+// 因為每筆預約可能內嵌一張照片＋一張簽名（皆為 base64），若把全部
+// 預約合併成單一 JSON 文件，累積久了容易超過 Firestore 單一文件 1MB
+// 上限；改成每筆各自一份文件後，只要單張照片不過大就不會有此問題。
+const FB_BOOKINGS_COLLECTION = 'bd03_bookings';
+let bookingDocIds=new Set(); // 記錄目前雲端已存在的預約文件 ID，用於偵測刪除
+
+async function fbGetAllBookings(){
+  if(!FIREBASE_READY){console.warn('尚未設定 Firebase');return null;}
+  try{
+    const snap=await db.collection(FB_BOOKINGS_COLLECTION).get();
+    const list=[];
+    snap.forEach(doc=>list.push(doc.data()));
+    bookingDocIds=new Set(list.map(b=>String(b.id)));
+    return {ok:true,data:list};
+  }catch(e){
+    console.error('fbGetAllBookings 錯誤:',e);
+    throw e;
+  }
+}
+async function fbSaveAllBookings(list){
+  if(!FIREBASE_READY){console.warn('尚未設定 Firebase');return null;}
+  try{
+    // JSON 轉一輪可去除 undefined 欄位（Firestore 不接受 undefined 值）
+    const clean=list.map(b=>JSON.parse(JSON.stringify(b)));
+    const currentIds=new Set(clean.map(b=>String(b.id)));
+    const batch=db.batch();
+    clean.forEach(b=>{
+      batch.set(db.collection(FB_BOOKINGS_COLLECTION).doc(String(b.id)), b);
+    });
+    bookingDocIds.forEach(id=>{
+      if(!currentIds.has(id)){
+        batch.delete(db.collection(FB_BOOKINGS_COLLECTION).doc(id));
+      }
+    });
+    await batch.commit();
+    bookingDocIds=currentIds;
+    return {ok:true};
+  }catch(e){
+    console.error('fbSaveAllBookings 錯誤:',e);
+    throw e;
+  }
 }
 
 // ── 使用者資料 ───────────────────────────────────────────
@@ -749,8 +834,8 @@ let USERS={};
 async function loadUsers(){
   showSync('⟳ 載入使用者…','#C9A8E0');
   try{
-    const r=await gasGet('getUsers');
-    if(r&&r.ok&&Object.keys(r.data).length){
+    const r=await fbGet('users');
+    if(r&&r.ok&&r.data&&Object.keys(r.data).length){
       USERS=r.data;
       showSync('✓ 使用者已同步');
     } else {
@@ -784,8 +869,8 @@ async function saveUsers(){
   localStorage.setItem('pg_users',JSON.stringify(USERS));
   showSync('⟳ 儲存使用者…','#C9A8E0');
   try{
-    const r=await gasPost('saveUsers',USERS);
-    if(r&&r.ok)showSync('✓ 已同步至 Google 試算表');
+    const r=await fbSet('users',USERS);
+    if(r&&r.ok)showSync('✓ 已同步至 Firebase');
     else showSync('⚠ 儲存失敗','#C0334A');
   }catch(e){showSync('⚠ 網路錯誤，已暫存本機','#F5A27A');}
 }
@@ -832,7 +917,7 @@ async function loadFeeRecords(){
   const cached=JSON.parse(localStorage.getItem('pg_fee_records')||'[]');
   feeRecords=cached;
   try{
-    const r=await gasGet('getFeeRecords');
+    const r=await fbGet('feeRecords');
     if(r&&r.ok&&Array.isArray(r.data)){
       feeRecords=r.data;
       localStorage.setItem('pg_fee_records',JSON.stringify(feeRecords));
@@ -842,7 +927,7 @@ async function loadFeeRecords(){
 }
 async function persistFeeRecords(){
   localStorage.setItem('pg_fee_records',JSON.stringify(feeRecords));
-  try{ await gasPost('saveFeeRecords',feeRecords); }catch(e){}
+  try{ await fbSet('feeRecords',feeRecords); }catch(e){}
 }
 function clearFeeRecord(){
   document.getElementById('fee-date').value='';
@@ -937,9 +1022,9 @@ async function loadBookings(){
   }
 
   try{
-    const r=await gasGet('getBookings');
+    const r=await fbGetAllBookings();
     if(r&&r.ok){
-      if(r.data.length){
+      if(r.data&&r.data.length){
         bookings=r.data.map(mergeBooking);
         // 存回 localStorage（含照片資料）
         localStorage.setItem('pg_bookings',JSON.stringify(bookings));
@@ -987,8 +1072,8 @@ async function save(){
   localStorage.setItem('pg_bookings',JSON.stringify(bookings));
   showSync('⟳ 儲存預約紀錄…','#C9A8E0');
   try{
-    const r=await gasPost('saveBookings',bookings);
-    if(r&&r.ok)showSync('✓ 已同步至 Google 試算表');
+    const r=await fbSaveAllBookings(bookings);
+    if(r&&r.ok)showSync('✓ 已同步至 Firebase');
     else showSync('⚠ 儲存失敗','#C0334A');
   }catch(e){showSync('⚠ 網路錯誤，已暫存本機','#F5A27A');}
 }
@@ -1549,59 +1634,27 @@ function retakePhoto(i){
   startCam(i);
 }
 
-// ── 將 Google Drive 分享連結轉換為可直接嵌入的 img src ──
+// ── 將雲端圖片網址轉換為可直接嵌入的 img src ──
+// 目前未啟用 Firebase Storage（免付費 Spark 方案不支援），照片與簽名
+// 皆以壓縮過的 base64 字串直接存入 Firestore 文件中，此函式僅保留
+// 對 base64、以及舊資料中可能殘留的 Google Drive 連結的相容處理。
 function driveImgSrc(photoData){
   if(!photoData) return '';
-  // Drive 分享連結格式：https://drive.google.com/file/d/FILE_ID/view?...
-  // 或 https://drive.google.com/open?id=FILE_ID
-  // 或已是 /uc?export=view 格式
   if(photoData.startsWith('data:')) return photoData; // base64 直接用
-  const m = photoData.match(/\/d\/([^\/\?&]+)/) || photoData.match(/[?&]id=([^&]+)/);
+  const m = photoData.match(/drive\.google\.com.*\/d\/([^\/\?&]+)/) || photoData.match(/drive\.google\.com.*[?&]id=([^&]+)/);
   if(m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800`;
-  return photoData; // 其他 URL 直接用
+  return photoData; // 其他 URL（例如未來若升級方案改用 Storage）直接使用
 }
 
-// ── 上傳單張照片到 GAS Drive，回傳公開 URL ──
-async function uploadPhotoToGAS(base64DataUrl, filename, mimeType='image/jpeg'){
-  if(!GAS_URL) return base64DataUrl;
-  try{
-    const base64=base64DataUrl.split(',')[1];
-    // 檢查大小（GAS POST 限制約 50MB，base64 約比原檔大 33%）
-    const sizeKB=Math.round(base64.length/1024);
-    showSync(`⟳ 上傳中（${sizeKB}KB）…`,'#C9A8E0');
-    const r=await fetch(GAS_URL,{
-      method:'POST',
-      body:JSON.stringify({action:'savePhoto', data:{base64, filename, mimeType}})
-    });
-    if(!r.ok){
-      showSync(`⚠️ 上傳失敗：HTTP ${r.status}`,'#C0334A');
-      return base64DataUrl;
-    }
-    const json=await r.json();
-    if(json&&json.ok&&json.url) return json.url;
-    if(json&&json.msg) showSync('⚠️ GAS錯誤：'+json.msg,'#C0334A');
-  }catch(e){
-    showSync('⚠️ 上傳失敗：'+e.message,'#C0334A');
-    console.error('uploadPhotoToGAS error:',e);
-  }
+// ── 照片／簽名目前直接以 base64 存入 Firestore，不經過 Storage 上傳 ──
+// 拍照時已壓縮為長邊 800px、JPEG 品質 0.72，單張約數十 KB，
+// 加上預約資料改為「每筆一份 Firestore 文件」，不會超過 1MB 文件大小限制。
+// 若日後升級為 Blaze 方案並改用 Firebase Storage，只需把這個函式換回上傳邏輯即可。
+async function uploadPhotoToFirebase(base64DataUrl){
   return base64DataUrl;
 }
-
-// ── 簽名上傳至 Drive，回傳公開 URL ──
-async function uploadSignToGAS(date){
-  if(!driverSignDataUrl) return '';
-  if(driverSignDataUrl.startsWith('http')) return driverSignDataUrl; // 已是 Drive URL
-  showSync('⟳ 上傳簽名中…','#C9A8E0');
-  const fname=`sign_${date||'driver'}.png`;
-  const url=await uploadPhotoToGAS(driverSignDataUrl, fname, 'image/png');
-  if(url&&url.startsWith('http')){
-    try{ localStorage.setItem('pg_sign_'+date, url); }catch(e){}
-    driverSignDataUrl=url;
-    showSync('✓ 簽名已上傳至 Google Drive','#1E8449');
-    return url;
-  }
-  showSync('⚠️ 簽名上傳失敗，請確認網路後重試','#E07B39');
-  return '';
+async function uploadSignToFirebase(){
+  return driverSignDataUrl;
 }
 
 async function saveDispatch(){
@@ -1617,13 +1670,7 @@ async function saveDispatch(){
     driverSignDataUrl=signCanvas.toDataURL('image/png');
     try{ localStorage.setItem('pg_sign_'+date, driverSignDataUrl); }catch(e){}
   }
-  // 有簽名且還不是 Drive URL → 上傳
-  if(date && driverSignDataUrl && !driverSignDataUrl.startsWith('http')){
-    const signUploadUrl = await uploadSignToGAS(date);
-    if(signUploadUrl && signUploadUrl.startsWith('http')){
-      driverSignDataUrl = signUploadUrl;
-    }
-  }
+
   const items=bookings.filter(b=>b.date===date);
 
   // 顯示儲存中狀態
@@ -1638,31 +1685,17 @@ async function saveDispatch(){
 
     const photoImg=document.getElementById('photo-img-'+i);
     const photoTime=document.getElementById('photo-time-'+i)?.textContent||bookings[idx].photoTime||'';
-    let photoData=bookings[idx].photoData||'';
+    const photoData=bookings[idx].photoData||'';
 
     // 取得照片來源：優先用 img.src（已渲染），其次用 bookings 快取
     // 注意：乘客區塊未展開時 photoImg 存在但 src 可能為空，直接用 photoData
     const imgSrc = photoImg&&photoImg.src&&!photoImg.src.endsWith(location.href)&&photoImg.src.length>100 ? photoImg.src : '';
     const effectivePhoto = imgSrc || photoData;
+    if(photoImg && effectivePhoto) photoImg.dataset.newPhoto='';
 
-    if(effectivePhoto && !effectivePhoto.startsWith('http')){
-      // 還不是 Drive URL → 上傳
-      showSync(`⟳ 上傳照片（${b.user}）…`,'#C9A8E0');
-      const fname=`photo_${b.id||i}_${date}.jpg`;
-      const uploadResult=await uploadPhotoToGAS(effectivePhoto, fname);
-      if(uploadResult && uploadResult.startsWith('http')){
-        photoData=uploadResult;
-        if(photoImg){ photoImg.src=driveImgSrc(photoData); photoImg.dataset.newPhoto=''; }
-        showSync(`✓ ${b.user} 照片已上傳`,'#1E8449');
-      } else {
-        photoData=effectivePhoto;
-        showSync(`⚠️ ${b.user} 照片上傳失敗`,'#E07B39');
-      }
-    } else if(effectivePhoto && effectivePhoto.startsWith('http')){
-      photoData=effectivePhoto;
-    }
+    // 簽名：優先用本次新簽名（base64 或既有網址），沒有才沿用舊資料
+    const signUrl = driverSignDataUrl || bookings[idx].signUrl || '';
 
-    const signUrl = driverSignDataUrl.startsWith('http') ? driverSignDataUrl : (bookings[idx].signUrl||'');
     bookings[idx]={...bookings[idx],
       dispatched:true,
       phone: bookings[idx].phone || (USERS[bookings[idx].user]&&USERS[bookings[idx].user].phone) || '',
@@ -1674,8 +1707,8 @@ async function saveDispatch(){
       rarr:document.getElementById('dp-rarr-'+i)?.value||'',
       rkm:document.getElementById('dp-rkm-'+i)?.value||'',
       rfee:document.getElementById('dp-rfee-'+i)?.value||'',
-      photoData,
-      photoUrl: photoData.startsWith('http') ? photoData : (bookings[idx].photoUrl||''),
+      photoData: effectivePhoto,
+      photoUrl: effectivePhoto&&effectivePhoto.startsWith('http') ? effectivePhoto : (bookings[idx].photoUrl||''),
       photoTime,
       signUrl
     };
@@ -1991,13 +2024,14 @@ function genRecord(){
 let inspectData={};
 async function loadInspect(){
   try{
-    const r=await gasGet('getInspect');
-    if(r&&r.ok){inspectData=r.data;localStorage.setItem('pg_inspect',JSON.stringify(inspectData));}
+    const r=await fbGet('inspect');
+    if(r&&r.ok&&r.data){inspectData=r.data;localStorage.setItem('pg_inspect',JSON.stringify(inspectData));}
+    else if(!(r&&r.ok)){inspectData=JSON.parse(localStorage.getItem('pg_inspect')||'{}');}
   }catch(e){inspectData=JSON.parse(localStorage.getItem('pg_inspect')||'{}');}
 }
 async function saveInspect(){
   localStorage.setItem('pg_inspect',JSON.stringify(inspectData));
-  try{await gasPost('saveInspect',inspectData);showSync('✓ 已同步');}
+  try{await fbSet('inspect',inspectData);showSync('✓ 已同步');}
   catch(e){showSync('⚠ 暫存本機','#F5A27A');}
 }
 function inspKey(dt,trip,col){return `${dt}|${trip}|${col}`;}
@@ -2090,13 +2124,14 @@ function genInspect(){
 let cleanData={};
 async function loadClean(){
   try{
-    const r=await gasGet('getClean');
-    if(r&&r.ok){cleanData=r.data;localStorage.setItem('pg_clean',JSON.stringify(cleanData));}
+    const r=await fbGet('clean');
+    if(r&&r.ok&&r.data){cleanData=r.data;localStorage.setItem('pg_clean',JSON.stringify(cleanData));}
+    else if(!(r&&r.ok)){cleanData=JSON.parse(localStorage.getItem('pg_clean')||'{}');}
   }catch(e){cleanData=JSON.parse(localStorage.getItem('pg_clean')||'{}');}
 }
 async function saveClean(){
   localStorage.setItem('pg_clean',JSON.stringify(cleanData));
-  try{await gasPost('saveClean',cleanData);showSync('✓ 已同步');}
+  try{await fbSet('clean',cleanData);showSync('✓ 已同步');}
   catch(e){showSync('⚠ 暫存本機','#F5A27A');}
 }
 function clnKey(dt,col){return `${dt}|${col}`;}
@@ -2360,19 +2395,19 @@ function genReceipts(){
   });
 
   renderReceipts();
-  syncReceiptsToGAS(receiptsCache); // 同步到雲端試算表
+  syncReceiptsToFirebase(receiptsCache); // 同步到雲端試算表
  }catch(err){
   console.error('genReceipts 錯誤:',err);
   alert('產生收據失敗：'+err.message);
  }
 }
 
-// 將收據資料同步到 GAS（新增/更新「收據」工作表）
-async function syncReceiptsToGAS(receipts){
-  if(!GAS_URL) return;
+// 將收據資料同步到 Firebase（bd03 集合中的 receipts 文件）
+async function syncReceiptsToFirebase(receipts){
+  if(!FIREBASE_READY) return;
   try{
     showSync('⟳ 同步收據紀錄…','#C9A8E0');
-    await gasPost('saveReceipts', receipts);
+    await fbSet('receipts', receipts);
     showSync('✓ 收據已同步','#1E8449');
   }catch(e){
     console.warn('收據同步失敗',e);
@@ -2685,15 +2720,16 @@ function printMonthlyReport(){
 let vitalsData={};
 async function loadVitals(){
   try{
-    const r=await gasGet('getVitals');
-    if(r&&r.ok){vitalsData=r.data;localStorage.setItem('pg_vitals',JSON.stringify(vitalsData));}
+    const r=await fbGet('vitals');
+    if(r&&r.ok&&r.data){vitalsData=r.data;localStorage.setItem('pg_vitals',JSON.stringify(vitalsData));}
+    else if(!(r&&r.ok)){vitalsData=JSON.parse(localStorage.getItem('pg_vitals')||'{}');}
   }catch(e){vitalsData=JSON.parse(localStorage.getItem('pg_vitals')||'{}');}
 }
 async function saveVital(date,field,val){
   const k='pg_vital_'+date+'_'+field;
   vitalsData[k]=val;
   localStorage.setItem('pg_vitals',JSON.stringify(vitalsData));
-  try{await gasPost('saveVitals',vitalsData);showSync('✓ 已同步');}
+  try{await fbSet('vitals',vitalsData);showSync('✓ 已同步');}
   catch(e){showSync('⚠ 暫存本機','#F5A27A');}
 }
 function getVital(date,field){
@@ -3170,8 +3206,8 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('bk-ret').value='11:50';
   document.getElementById('fee-date').value=today;
 
-  if(!GAS_URL){
-    // 尚未設定 GAS_URL，使用本機資料
+  if(!FIREBASE_READY){
+    // 尚未設定 Firebase，使用本機資料
     USERS=JSON.parse(localStorage.getItem('pg_users')||'{}');
     bookings=JSON.parse(localStorage.getItem('pg_bookings')||'[]');
     inspectData=JSON.parse(localStorage.getItem('pg_inspect')||'{}');
