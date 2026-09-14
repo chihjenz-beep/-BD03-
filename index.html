@@ -548,6 +548,14 @@ tr:hover td{background:#F8FBFD}
         <span>合計 <span id="fee-sum" style="font-weight:700;color:var(--td)">NT$ 0</span></span>
       </div>
       <div id="fee-list" style="margin-top:8px;max-height:280px;overflow-y:auto"></div>
+      <div style="margin-top:14px;padding:12px 14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+        <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;letter-spacing:.04em">📊 車資收款月報表（明細＋依個案彙總，與派車單車資計算分開）</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="field" style="margin:0"><label style="font-size:11px">民國年份</label><input type="number" id="fee-rpt-y" value="115" min="110" max="130" style="width:72px"></div>
+          <div class="field" style="margin:0"><label style="font-size:11px">月份</label><select id="fee-rpt-m" style="width:72px"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9" selected>9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></div>
+          <button class="btn btn-p" style="margin-top:16px" onclick="exportFeeRecordsReport()">📥 匯出本月收款報表</button>
+        </div>
+      </div>
     </div>
   </div>
   <div id="dp-users"></div>
@@ -2246,6 +2254,70 @@ function genClean(){
 }
 
 /* ===== Excel Exports ===== */
+/* ===== 車資收款紀錄表 月報表（獨立於派車單車資計算） ===== */
+function exportFeeRecordsReport(){
+  const y=parseInt(document.getElementById('fee-rpt-y').value);
+  const m=parseInt(document.getElementById('fee-rpt-m').value);
+  if(!y||!m){alert('請輸入正確的民國年份與月份');return;}
+  const gy=y+1911;
+  const prefix=`${gy}-${String(m).padStart(2,'0')}-`;
+  const items=feeRecords.filter(f=>f.date&&f.date.startsWith(prefix)).sort((a,b)=>a.date.localeCompare(b.date)||(a.id-b.id));
+  if(!items.length){alert('該月份查無車資收款紀錄');return;}
+
+  const wb=XLSX.utils.book_new();
+
+  // ── 工作表一：明細（逐筆收款紀錄）──
+  const ws1={};
+  ws1['A1']={v:`嘉義縣平安家園多元關懷協會 BD03 車資收款紀錄表  民國 ${y} 年 ${m} 月`,t:'s',s:{font:{bold:true,sz:13,name:'新細明體'},alignment:{horizontal:'center'}}};
+  const heads1=['序號','日期','個案','金額','備註'];
+  heads1.forEach((h,ci)=>{ws1[XLSX.utils.encode_cell({r:1,c:ci})]=hdr(h);});
+  let row=2,total=0;
+  items.forEach((f,i)=>{
+    const d=new Date(f.date+'T00:00:00');
+    const roc=`${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    const amt=parseFloat(f.amount)||0;
+    total+=amt;
+    const cells=[i+1,roc,f.user,`NT$${Math.round(amt).toLocaleString()}`,f.note||''];
+    cells.forEach((v,ci)=>{ws1[XLSX.utils.encode_cell({r:row,c:ci})]={v:String(v),t:'s',s:{font:{sz:10,name:'新細明體'},alignment:{horizontal:'center',vertical:'center'}}};});
+    row++;
+  });
+  ws1[XLSX.utils.encode_cell({r:row,c:0})]={v:'合計',t:'s',s:{font:{bold:true,sz:11,name:'新細明體'},fill:{fgColor:{rgb:'C5E0CC'},patternType:'solid'},alignment:{horizontal:'right'}}};
+  ws1[XLSX.utils.encode_cell({r:row,c:3})]={v:`NT$ ${Math.round(total).toLocaleString()}`,t:'s',s:{font:{bold:true,sz:12,name:'新細明體'},fill:{fgColor:{rgb:'C5E0CC'},patternType:'solid'},alignment:{horizontal:'center'}}};
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:heads1.length-1}},{s:{r:row,c:0},e:{r:row,c:2}}];
+  ws1['!ref']=`A1:${XLSX.utils.encode_col(heads1.length-1)}${row+1}`;
+  ws1['!cols']=[{wch:6},{wch:12},{wch:12},{wch:12},{wch:26}];
+  XLSX.utils.book_append_sheet(wb,ws1,'明細');
+
+  // ── 工作表二：依個案彙總 ──
+  const byUser={};
+  items.forEach(f=>{
+    if(!byUser[f.user]) byUser[f.user]={count:0,total:0};
+    byUser[f.user].count++;
+    byUser[f.user].total+=(parseFloat(f.amount)||0);
+  });
+  const users=Object.keys(byUser).sort();
+  const ws2={};
+  ws2['A1']={v:`嘉義縣平安家園多元關懷協會 BD03 車資收款彙總表（依個案）  民國 ${y} 年 ${m} 月`,t:'s',s:{font:{bold:true,sz:13,name:'新細明體'},alignment:{horizontal:'center'}}};
+  const heads2=['個案','筆數','小計'];
+  heads2.forEach((h,ci)=>{ws2[XLSX.utils.encode_cell({r:1,c:ci})]=hdr(h);});
+  let row2=2,grand=0;
+  users.forEach(u=>{
+    const rec=byUser[u];
+    grand+=rec.total;
+    const cells=[u,rec.count,`NT$${Math.round(rec.total).toLocaleString()}`];
+    cells.forEach((v,ci)=>{ws2[XLSX.utils.encode_cell({r:row2,c:ci})]={v:String(v),t:'s',s:{font:{sz:10,name:'新細明體'},alignment:{horizontal:'center',vertical:'center'}}};});
+    row2++;
+  });
+  ws2[XLSX.utils.encode_cell({r:row2,c:0})]={v:'總計',t:'s',s:{font:{bold:true,sz:11,name:'新細明體'},fill:{fgColor:{rgb:'C5E0CC'},patternType:'solid'},alignment:{horizontal:'right'}}};
+  ws2[XLSX.utils.encode_cell({r:row2,c:2})]={v:`NT$ ${Math.round(grand).toLocaleString()}`,t:'s',s:{font:{bold:true,sz:12,name:'新細明體'},fill:{fgColor:{rgb:'C5E0CC'},patternType:'solid'},alignment:{horizontal:'center'}}};
+  ws2['!merges']=[{s:{r:0,c:0},e:{r:0,c:heads2.length-1}},{s:{r:row2,c:0},e:{r:row2,c:1}}];
+  ws2['!ref']=`A1:${XLSX.utils.encode_col(heads2.length-1)}${row2+1}`;
+  ws2['!cols']=[{wch:14},{wch:8},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws2,'個案彙總');
+
+  XLSX.writeFile(wb,`平安家園_BD03_車資收款紀錄表_${y}年${m}月.xlsx`);
+}
+
 function styledCell(v,bold,bg,color){return{v:v,t:'s',s:{font:{bold:!!bold,sz:10,color:{rgb:color||'000000'},name:'新細明體'},fill:bg?{fgColor:{rgb:bg},patternType:'solid'}:{},alignment:{horizontal:'center',vertical:'center',wrapText:true}}};}
 function hdr(v){return styledCell(v,true,'C5E0CC','085041');}
 function sub(v){return styledCell(v,true,'E8F5E9','0F6E56');}
